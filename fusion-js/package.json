@@ -1,0 +1,16 @@
+{
+  "name": "fusion-js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [],
+  "author": "Vinicius Giles (gilesv@protonmail.com)",
+  "license": "MIT",
+  "dependencies": {
+    "typescript": "^3.9.5"
+  }
+}

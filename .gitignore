@@ -1,0 +1,9 @@
+fusion-js/node_modules/
+fusion-wasm/node_modules/
+fusion-wasm/**/*.rs.bk
+fusion-wasm/Cargo.lock
+fusion-wasm/bin/
+fusion-wasm/wasm-pack.log
+fusion-wasm/target/
+fusion-wasm/node_modules
+fusion-wasm/pkg
