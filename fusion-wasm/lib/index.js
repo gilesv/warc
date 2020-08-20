@@ -1,6 +1,21 @@
-import { Element, ElementProps as Props, render } from "../pkg/fusion_wasm.js";
+import { Element, ElementProps as Props, get_context, work_loop, render as render_internal } from "../pkg/fusion_wasm.js";
+
 let TEXT_ELEMENT = "_T";
 let NULL = "";
+
+let context = get_context();
+
+function render(element, parentDom) {
+  context = render_internal(context, element, parentDom);
+}
+
+function workLoop(deadline) {
+  context = work_loop(context, deadline.didTimeout);
+
+  // window.requestIdleCallback(workLoop);
+}
+
+window.requestIdleCallback(workLoop);
 
 function createElement(type, props = {}, ...rawChildren) {
   props = props || {};
