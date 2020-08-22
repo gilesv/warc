@@ -95,12 +95,26 @@ enum Node {
     Element(HTMLElement),
 }
 
+enum FiberEffect {
+    Placement,
+    Update,
+    Deletion,
+}
+
 struct Fiber {
     _type: String,
     props: Option<Rc<RefCell<ElementProps>>>,
     element_children: Option<Vec<Rc<RefCell<Element>>>>,
-    dom_node: Option<Node>,
+    dom_node: Option<Rc<RefCell<Node>>>,
+
+    alternate: Option<FiberCell>,
+    parent: Option<FiberCell>,
+    sibling: Option<FiberCell>,
+    child: Option<FiberCell>,
+    effect: Option<FiberEffect>,
 }
+
+type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
 impl Fiber {
     fn new(_type: &str) -> Self {
@@ -109,15 +123,21 @@ impl Fiber {
             props: None,
             element_children: None,
             dom_node: None,
+            alternate: None,
+            parent: None,
+            sibling: None,
+            child: None,
+            effect: None
         }
     }
 }
 
+
 #[wasm_bindgen(inspectable)]
 pub struct Context {
-    wip_root: Option<Rc<RefCell<Fiber>>>,
+    wip_root: Option<FiberCell>,
     current_root: Option<Fiber>,
-    next_unit_of_work: Option<Rc<RefCell<Fiber>>>,
+    next_unit_of_work: Option<FiberCell>,
     wip_functional_fiber: Option<Fiber>,
     hook_index: usize,
     window: Window,
@@ -164,11 +184,9 @@ impl Context {
         }
     }
 
-    fn perform_unit_of_work(&mut self) -> Option<Rc<RefCell<Fiber>>> {
-        let mut fiber = self.next_unit_of_work
-            .as_ref()
-            .unwrap()
-            .borrow_mut();
+    fn perform_unit_of_work(&mut self) -> Option<FiberCell> {
+        let wip_unit = self.next_unit_of_work.as_ref().unwrap();
+        let mut fiber = wip_unit.borrow_mut();
         let is_functional_component = fiber._type == FUNCTIONAL;
 
         if is_functional_component {
@@ -177,8 +195,10 @@ impl Context {
             // updateRegularTree
             if fiber.dom_node.is_none() {
                 let dom_node = self.create_dom_node(&fiber);
-                fiber.dom_node = Some(dom_node);
+                fiber.dom_node = Some(Rc::new(RefCell::new(dom_node)));
             }
+
+            self.reconcile_children(wip_unit, &mut fiber);
         }
         
         return None;
@@ -202,6 +222,106 @@ impl Context {
     fn update_dom_node(&self, dom_node: &HTMLElement, props: &ElementProps) {
         dom_node.set_class_name(&props.class_name);
     }
+
+    fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
+        let children = fiber.element_children.as_ref().unwrap();
+        let mut i = 0;
+        let mut previous_sibling: Option<Rc<RefCell<Box<Fiber>>>> = None;
+
+        let mut old_child_fiber = if fiber.alternate.is_some() {
+            let alternate = fiber.alternate.as_ref().unwrap().borrow();
+
+            if alternate.child.is_some() {
+                let child = alternate.child.as_ref().unwrap();
+                Some(Rc::clone(child))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        while i < children.len() || old_child_fiber.is_some() {
+            let child_element = &children[i].borrow();
+
+            let has_same_type = if old_child_fiber.is_some() {
+                let old_child_type = &old_child_fiber.as_ref().unwrap().borrow()._type;
+                let new_child_type = &child_element.element_type;
+
+                *old_child_type == *new_child_type
+            } else {
+                false
+            };
+
+            // Generate a new Fiber for the updated node
+            let child_fiber = if has_same_type {
+                let mut child_fiber = Fiber::new(&old_child_fiber.as_ref().unwrap().borrow()._type);
+                child_fiber.props = Some(Rc::clone(&child_element.props));
+
+                // get existing dom node
+                child_fiber.dom_node = if old_child_fiber.is_some() {
+                    if let Some(dom_node) = &old_child_fiber.as_ref().unwrap().borrow().dom_node {
+                        Some(Rc::clone(dom_node))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // relate to parent (current fiber)
+                child_fiber.parent = Some(Rc::clone(wip_unit));
+
+                // relate to alternate
+                child_fiber.alternate = Some(Rc::clone(old_child_fiber.as_ref().unwrap()));
+
+                // effect
+                child_fiber.effect = Some(FiberEffect::Update);
+
+                child_fiber
+            } else {
+                let mut child_fiber = Fiber::new(&child_element.element_type);
+                child_fiber.props = Some(Rc::clone(&child_element.props));
+
+                // relate to parent (current fiber)
+                child_fiber.parent = Some(Rc::clone(wip_unit));
+
+                // effect
+                child_fiber.effect = Some(FiberEffect::Placement);
+
+                child_fiber
+            };
+
+            if old_child_fiber.is_some() && !has_same_type {
+                old_child_fiber.as_ref().unwrap().borrow_mut().effect = Some(FiberEffect::Deletion);
+                // TODO: PUSH OLD CHILD FIBER TO DELETION ARRAY
+            }
+
+            if old_child_fiber.is_some() {
+                let old_child_sibling = {
+                    let old_child = old_child_fiber.as_ref().unwrap().borrow();
+                    let sibling = old_child.sibling.as_ref().unwrap();
+                    Rc::clone(sibling)
+                };
+
+                old_child_fiber = Some(old_child_sibling);
+            }
+
+            let child_fiber_rc = Rc::new(RefCell::new(Box::new(child_fiber)));
+
+            if i == 0 {
+                fiber.child = Some(Rc::clone(&child_fiber_rc));
+            } else {
+                if let Some(previous_sibling) = previous_sibling {
+                    previous_sibling.borrow_mut().sibling = Some(Rc::clone(&child_fiber_rc));
+                }
+            }
+            
+            previous_sibling = Some(Rc::clone(&child_fiber_rc));
+            i += 1;
+
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -221,10 +341,10 @@ pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) 
     root.element_children = Some(vec![Rc::new(RefCell::new(element))]);
 
     // Store the container HTML element
-    root.dom_node = Some(Node::Element(container));
+    root.dom_node = Some(Rc::new(RefCell::new(Node::Element(container))));
 
     // Make it the Work in Progress Root and the Next Unit of Work
-    let root = Rc::new(RefCell::new(root));
+    let root = Rc::new(RefCell::new(Box::new(root)));
     context.wip_root = Some(Rc::clone(&root));
     context.next_unit_of_work = Some(Rc::clone(&root));
 
@@ -234,6 +354,7 @@ pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) 
 
 #[wasm_bindgen]
 pub fn work_loop(context_js: JsValue, did_timeout: bool) -> Context {
+    console_error_panic_hook::set_once();
     let mut context = Context::from_js_value(&context_js).unwrap();
 
     context.work_loop(did_timeout);
