@@ -131,7 +131,25 @@ impl Fiber {
         }
     }
 }
+struct FiberParentsIter<'fiber> {
+    next: Option<&'fiber FiberCell>,
+}
 
+impl<'fiber> Iterator for FiberParentsIter<'fiber> {
+    type Item = &'fiber FiberCell;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.map_or(None, |parent| { Some(parent) })
+    }
+}
+
+impl Fiber {
+    fn parents(&self) -> FiberParentsIter {
+        FiberParentsIter {
+            next: self.parent.as_ref().map(|parent| { parent })
+        }
+    }
+}
 
 #[wasm_bindgen(inspectable)]
 pub struct Context {
@@ -200,7 +218,24 @@ impl Context {
 
             self.reconcile_children(wip_unit, &mut fiber);
         }
-        
+
+        // If fiber has a child, make it the next unit of work
+        if let Some(fiber_child) = &fiber.child {
+            return Some(Rc::clone(fiber_child));
+
+        // ...or if it has a sibling, make it the next unit of work
+        } else if let Some(fiber_sibling) = &fiber.sibling {
+            return Some(Rc::clone(fiber_sibling));
+
+        // Otherwise look for the closest parent's sibling
+        } else {
+            for parent in fiber.parents() {
+                if let Some(parent_sibling) = &parent.borrow().sibling {
+                    return Some(Rc::clone(parent_sibling));
+                }
+            }
+        }
+
         return None;
     }
 
@@ -224,7 +259,10 @@ impl Context {
     }
 
     fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
-        let children = fiber.element_children.as_ref().unwrap();
+        let children = fiber.element_children
+            .as_ref().map(|children| { children });
+        let children_len = children.map_or(0, |children| { children.len() });
+
         let mut i = 0;
         let mut previous_sibling: Option<Rc<RefCell<Box<Fiber>>>> = None;
 
@@ -241,8 +279,8 @@ impl Context {
             None
         };
 
-        while i < children.len() || old_child_fiber.is_some() {
-            let child_element = &children[i].borrow();
+        while i < children_len || old_child_fiber.is_some() {
+            let child_element = &children.unwrap()[i].borrow();
 
             let has_same_type = if old_child_fiber.is_some() {
                 let old_child_type = &old_child_fiber.as_ref().unwrap().borrow()._type;
@@ -307,17 +345,17 @@ impl Context {
                 old_child_fiber = Some(old_child_sibling);
             }
 
-            let child_fiber_rc = Rc::new(RefCell::new(Box::new(child_fiber)));
+            let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
 
             if i == 0 {
-                fiber.child = Some(Rc::clone(&child_fiber_rc));
+                fiber.child = Some(Rc::clone(&child_fiber));
             } else {
                 if let Some(previous_sibling) = previous_sibling {
-                    previous_sibling.borrow_mut().sibling = Some(Rc::clone(&child_fiber_rc));
+                    previous_sibling.borrow_mut().sibling = Some(Rc::clone(&child_fiber));
                 }
             }
             
-            previous_sibling = Some(Rc::clone(&child_fiber_rc));
+            previous_sibling = Some(Rc::clone(&child_fiber));
             i += 1;
 
         }
