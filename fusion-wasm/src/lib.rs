@@ -5,95 +5,17 @@ use js_sys::Reflect;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+mod element;
 mod fiber;
+mod constants;
+use element::{Element, ElementProps, Node};
 use fiber::{Fiber, FiberCell, FiberEffect};
-
-static TEXT_ELEMENT: &str = "__TEXT";
+use constants::{TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace=console)]
     fn log(s: &str);
-}
-
-#[wasm_bindgen]
-pub struct Element {
-    element_type: String,
-    props: Rc<RefCell<ElementProps>>,
-    children: Vec<Rc<RefCell<Element>>>,
-}
-
-#[wasm_bindgen]
-impl Element {
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        element_type: String,
-        props: ElementProps,
-        raw_children: Box<[JsValue]>
-    ) -> Element {
-        let children= raw_children.iter()
-            .map(|js_child| {
-                Rc::new(
-                    RefCell::new(
-                        Element::from_js_value(js_child).unwrap()
-                    )
-                )
-            }).collect();
-        
-        let props = Rc::new(RefCell::new(props));
-
-        Element { element_type, props, children }
-    }
-
-    pub fn from_js_value(js_value: &JsValue) -> Result<Element, JsValue> {
-        let ptr = unsafe { Reflect::get(&js_value, &JsValue::from_str("ptr"))? };
-        let ptr_u32: u32 = ptr.as_f64().ok_or(JsValue::NULL)? as u32;
-        let foo = unsafe { Element::from_abi(ptr_u32) };
-
-        Ok(foo)
-    }
-
-    pub fn is_text_element(&self) -> bool {
-        self.element_type == "_T"
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn element_type(&self) -> String {
-        self.element_type.clone()
-    }
-
-    #[wasm_bindgen(getter)]
-    pub fn props(&self) -> ElementProps {
-        self.props.borrow().clone()
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Clone)]
-pub struct ElementProps {
-    class_name: String,
-    node_value: String,
-}
-
-#[wasm_bindgen]
-impl ElementProps {
-    #[wasm_bindgen(constructor)]
-    pub fn new(class_name: String, node_value: String) -> ElementProps {
-        ElementProps { class_name, node_value }
-    }
-
-    pub fn class_name(&self) -> String {
-        self.class_name.clone()
-    }
-
-    pub fn node_value(&self) -> String {
-        self.node_value.clone()
-    }
-}
-
-enum Node {
-    Text(HTMLText),
-    Element(HTMLElement),
 }
 
 #[wasm_bindgen(inspectable)]
@@ -133,11 +55,8 @@ impl Context {
     }
 
     fn work_loop(&mut self, did_timeout: bool) {
-        unsafe { log(&format!("workloop called with {}", did_timeout)); }
-
         loop {
-            let next_unit_of_work = &self.next_unit_of_work;
-            let no_next_unit_of_work = next_unit_of_work.is_none();
+            let no_next_unit_of_work = self.next_unit_of_work.is_none();
 
             if did_timeout || no_next_unit_of_work {
                 break;
@@ -187,7 +106,7 @@ impl Context {
         let props = fiber.props().as_ref().unwrap().borrow();
 
         if fiber.is_text_fiber() {
-            let node: HTMLText = self.document.create_text_node(&props.node_value);
+            let node: HTMLText = self.document.create_text_node(&props.node_value());
 
             Node::Text(node)
         } else {
@@ -199,7 +118,7 @@ impl Context {
     }
 
     fn update_dom_node(&self, dom_node: &HTMLElement, props: &ElementProps) {
-        dom_node.set_class_name(&props.class_name);
+        dom_node.set_class_name(&props.class_name());
     }
 
     fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
@@ -228,7 +147,7 @@ impl Context {
             let has_same_type = if let Some(old_child_cell) = &old_child_fiber {
                 let old_child = old_child_cell.borrow();
                 let old_child_type = old_child.element_type();
-                let new_child_type = &child_element.element_type;
+                let new_child_type = child_element.element_type();
 
                 *old_child_type == *new_child_type
 
@@ -240,7 +159,7 @@ impl Context {
             let child_fiber = if has_same_type {
                 let mut child_fiber = Fiber::new(&old_child_fiber.as_ref().unwrap().borrow().element_type());
                 // TODO: move the props to the fiber since keeping child_element wont be necessary (Option::take)
-                child_fiber.set_props(Rc::clone(&child_element.props));
+                child_fiber.set_props(Rc::clone(&child_element.props()));
 
                 if let Some(old_child) = &old_child_fiber {
                     // relate to alternate
@@ -260,8 +179,8 @@ impl Context {
 
                 child_fiber
             } else {
-                let mut child_fiber = Fiber::new(&child_element.element_type);
-                child_fiber.set_props(Rc::clone(&child_element.props));
+                let mut child_fiber = Fiber::new(&child_element.element_type());
+                child_fiber.set_props(Rc::clone(&child_element.props()));
 
                 // relate to parent (current fiber)
                 child_fiber.set_parent(Rc::clone(wip_unit));
@@ -339,7 +258,7 @@ pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) 
 #[wasm_bindgen]
 pub fn work_loop(context_js: JsValue, did_timeout: bool) -> Context {
     console_error_panic_hook::set_once();
-    let mut context = Context::from_js_value(&context_js).unwrap();
+    let mut context: Context = Context::from_js_value(&context_js).unwrap();
 
     context.work_loop(did_timeout);
 
