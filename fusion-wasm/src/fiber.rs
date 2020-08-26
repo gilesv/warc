@@ -1,9 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::{Element, ElementProps, Node, TEXT_ELEMENT};
+use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
-static ROOT_FIBER: &str = "_R_";
-static FUNCTIONAL: &str = "_F_";
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
@@ -35,7 +33,7 @@ impl Fiber {
     }
 
     pub fn new_root() -> Self {
-        Self::new(ROOT_FIBER)
+        Self::new(FIBER_ROOT)
     }
 
     pub fn element_type(&self) -> &String {
@@ -43,7 +41,7 @@ impl Fiber {
     }
 
     pub fn is_functional_tree(&self) -> bool {
-        &self._type == FUNCTIONAL
+        &self._type == FIBER_FUNCTIONAL
     }
 
     pub fn is_text_fiber(&self) -> bool {
@@ -51,7 +49,7 @@ impl Fiber {
     }
 
     pub fn is_root_fiber(&self) -> bool {
-        &self._type == ROOT_FIBER
+        &self._type == FIBER_ROOT
     }
 
     pub fn dom_node(&self) -> &Option<Rc<RefCell<Node>>> {
@@ -124,20 +122,28 @@ impl Fiber {
 
     pub fn parents(&self) -> FiberParentsIter {
         FiberParentsIter {
-            next: self.parent.as_ref().map(|parent| { parent })
+            next: self.parent.as_ref().map(|parent| { Rc::clone(parent) })
         }
     }
 }
 
-pub struct FiberParentsIter<'fiber> {
-    next: Option<&'fiber FiberCell>,
+pub struct FiberParentsIter {
+    next: Option<FiberCell>,
 }
 
-impl<'fiber> Iterator for FiberParentsIter<'fiber> {
-    type Item = &'fiber FiberCell;
+impl Iterator for FiberParentsIter {
+    type Item = FiberCell;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next.map_or(None, |parent| { Some(parent) })
+        if let Some(next) = &self.next {
+            if let Some(parent) = &next.borrow().as_ref().parent {
+                Some(Rc::clone(parent))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 
