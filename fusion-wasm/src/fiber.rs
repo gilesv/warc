@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
-
+use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL, log};
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
@@ -119,10 +118,16 @@ impl Fiber {
     pub fn set_effect(&mut self, effect: FiberEffect) {
         self.effect.replace(effect);
     }
+}
 
-    pub fn parents(&self) -> FiberParentsIter {
+pub trait FiberParentIterator {
+    fn parents(&self) -> FiberParentsIter;
+}
+
+impl FiberParentIterator for FiberCell {
+    fn parents(&self) -> FiberParentsIter {
         FiberParentsIter {
-            next: self.parent.as_ref().map(|parent| { Rc::clone(parent) })
+            next: Some(Rc::clone(self)),
         }
     }
 }
@@ -135,15 +140,16 @@ impl Iterator for FiberParentsIter {
     type Item = FiberCell;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next) = &self.next {
-            if let Some(parent) = &next.borrow().as_ref().parent {
+        let mut next = None;
+        let result = if let Some(fiber) = self.next.as_ref() {
+            if let Some(parent) = fiber.borrow().parent().as_ref() {
+                next = Some(Rc::clone(parent));
                 Some(Rc::clone(parent))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+            } else { None }
+        } else { None };
+
+        self.next = next;
+        return result;
     }
 }
 

@@ -4,12 +4,13 @@ use web_sys::{Element as HTMLElement, Text as HTMLText, Window, Document};
 use js_sys::Reflect;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::mem;
 
 mod element;
 mod fiber;
 mod constants;
 use element::{Element, ElementProps, Node};
-use fiber::{Fiber, FiberCell, FiberEffect};
+use fiber::{Fiber, FiberCell, FiberEffect, FiberParentIterator};
 use constants::{TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 #[wasm_bindgen]
@@ -21,7 +22,7 @@ extern "C" {
 #[wasm_bindgen(inspectable)]
 pub struct Context {
     wip_root: Option<FiberCell>,
-    current_root: Option<Fiber>,
+    current_root: Option<FiberCell>,
     next_unit_of_work: Option<FiberCell>,
     wip_functional_fiber: Option<Fiber>,
     hook_index: usize,
@@ -55,14 +56,19 @@ impl Context {
     }
 
     fn work_loop(&mut self, did_timeout: bool) {
-        loop {
-            let no_next_unit_of_work = self.next_unit_of_work.is_none();
+        let mut no_next_unit_of_work = self.next_unit_of_work.is_none();
 
+        loop {
             if did_timeout || no_next_unit_of_work {
                 break;
             }
 
             self.next_unit_of_work = self.perform_unit_of_work();
+            no_next_unit_of_work = self.next_unit_of_work.is_none();
+        }
+
+        if no_next_unit_of_work && self.wip_root.is_some() {
+            self.commit_root();
         }
     }
 
@@ -76,6 +82,7 @@ impl Context {
             // updateRegularTree
             if fiber.dom_node().is_none() {
                 let dom_node = self.create_dom_node(&fiber);
+
                 fiber.set_dom_node(Rc::new(RefCell::new(dom_node)));
             }
 
@@ -92,7 +99,11 @@ impl Context {
 
         // Otherwise look for the closest parent's sibling
         } else {
-            for parent in fiber.parents() {
+            // Drop the mutable borrow to avoid crashing when looping through the parents
+            mem::drop(fiber);
+
+            for parent in wip_unit.parents() {
+                unsafe{ log(&format!("parent: {}", parent.borrow().as_ref().element_type())); }
                 if let Some(parent_sibling) = &parent.borrow().sibling() {
                     return Some(Rc::clone(parent_sibling));
                 }
@@ -175,6 +186,7 @@ impl Context {
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
+                // TODO: set an effect only if props really changed
                 child_fiber.set_effect(FiberEffect::Update);
 
                 child_fiber
@@ -224,6 +236,88 @@ impl Context {
         if let Some(child) = first_child_fiber {
             fiber.set_child(child);
         }
+    }
+
+    fn commit_root(&mut self) {
+        if self.wip_root.is_some() {
+
+            let wip_root_fiber = self.wip_root.as_ref().unwrap();
+            self.commit_work(&wip_root_fiber.borrow().child());
+            self.current_root = Some(Rc::clone(wip_root_fiber));
+            self.wip_root = None;
+        }
+    }
+
+    fn commit_work(&self, fiber: &Option<FiberCell>) {
+        if fiber.is_none() {
+            return;
+        }
+
+        let fiber = fiber.as_ref().unwrap();
+
+        let mut parent_dom_node = None;
+
+        
+        // let a = fiber.borrow().parents().count();
+        // unsafe { log(&format!("number of parents of {}: {}", fiber.borrow().element_type(), a)); }
+
+        unsafe { log(&format!("looking for parents")); }
+        for parent in fiber.parents() {
+            let parent = parent.borrow();
+            unsafe { log(&format!("found dom node for parent: {}", parent.element_type())); }
+
+            if let Some(dom_node) = parent.dom_node() {
+
+                parent_dom_node = Some(Rc::clone(dom_node));
+                break;
+            }
+        }
+
+        match fiber.borrow().effect().as_ref() {
+            Some(FiberEffect::Placement) => {
+                self.commit_node_append(&fiber, parent_dom_node);
+            },
+            Some(FiberEffect::Update) => {
+
+            },
+            Some(FiberEffect::Deletion) => {
+
+            },
+            None => {}
+        }
+
+        self.commit_work(&fiber.borrow().child());
+        self.commit_work(&fiber.borrow().sibling());
+    }
+
+    fn commit_node_append(&self, fiber: &FiberCell, parent_dom_node: Option<Rc<RefCell<Node>>>) -> Result<(), JsValue> {
+        let has_dom_node = fiber.borrow().dom_node().is_some();
+        let has_parent_node = parent_dom_node.is_some();
+        unsafe { log(&format!("{}, {}", has_dom_node.to_string(), has_parent_node.to_string())); }
+
+        if has_dom_node && has_parent_node {
+            let fiber = fiber.borrow();
+            let dom_node = fiber.dom_node().as_ref().unwrap();
+            let parent_node = parent_dom_node.unwrap();
+
+            let dom_node = &*dom_node.borrow();
+            let parent_node = &*parent_node.borrow();
+
+            match (parent_node, dom_node) {
+                // Append HTML element
+                (Node::Element(parent), Node::Element(child)) => {
+                    parent.append_child(&child)?;
+                },
+
+                // Append text node
+                (Node::Element(parent), Node::Text(text)) => {
+                    parent.append_child(&text)?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
     }
 }
 

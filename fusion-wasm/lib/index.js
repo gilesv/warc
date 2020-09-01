@@ -19,7 +19,7 @@ function render(element, parentDom) {
 function workLoop(deadline) {
   context = work_loop(context, deadline.didTimeout);
 
-  // window.requestIdleCallback(workLoop);
+  window.requestIdleCallback(workLoop);
 }
 
 
