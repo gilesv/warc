@@ -18,6 +18,17 @@ extern "C" {
     #[wasm_bindgen(js_namespace=console)]
     fn log(s: &str);
 }
+// Next let's define a macro that's like `println!`, only it works for
+// `console.log`. Note that `println!` doesn't actually work on the wasm target
+// because the standard library currently just eats all output. To get
+// `println!`-like behavior in your app you'll likely want a macro like this.
+
+#[macro_export]
+macro_rules! console_log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (unsafe { log(&format_args!($($t)*).to_string()); })
+}
 
 #[wasm_bindgen(inspectable)]
 pub struct Context {
@@ -64,6 +75,7 @@ impl Context {
             }
 
             self.next_unit_of_work = self.perform_unit_of_work();
+            
             no_next_unit_of_work = self.next_unit_of_work.is_none();
         }
 
@@ -103,7 +115,6 @@ impl Context {
             mem::drop(fiber);
 
             for parent in wip_unit.parents() {
-                unsafe{ log(&format!("parent: {}", parent.borrow().as_ref().element_type())); }
                 if let Some(parent_sibling) = &parent.borrow().sibling() {
                     return Some(Rc::clone(parent_sibling));
                 }
@@ -114,7 +125,7 @@ impl Context {
     }
 
     fn create_dom_node(&self, fiber: &Fiber) -> Node {
-        let props = fiber.props().as_ref().unwrap().borrow();
+        let props = fiber.props().as_ref().unwrap();
 
         if fiber.is_text_fiber() {
             let node: HTMLText = self.document.create_text_node(&props.node_value());
@@ -134,7 +145,7 @@ impl Context {
 
     fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
         let children = fiber.element_children().as_ref();
-        let children_len = children.map_or(0, |children| { children.len() });
+        let children_len = children.map_or(0, |children| { children.borrow().len() });
 
         let mut i = 0;
         let mut previous_sibling: Option<FiberCell> = None;
@@ -153,7 +164,7 @@ impl Context {
         };
 
         while i < children_len || old_child_fiber.is_some() {
-            let child_element = &children.unwrap()[i].borrow();
+            let mut child_element = &mut children.unwrap().borrow_mut()[i];
 
             let has_same_type = if let Some(old_child_cell) = &old_child_fiber {
                 let old_child = old_child_cell.borrow();
@@ -161,7 +172,6 @@ impl Context {
                 let new_child_type = child_element.element_type();
 
                 *old_child_type == *new_child_type
-
             } else {
                 false
             };
@@ -169,8 +179,14 @@ impl Context {
             // Generate a new Fiber for the updated node
             let child_fiber = if has_same_type {
                 let mut child_fiber = Fiber::new(&old_child_fiber.as_ref().unwrap().borrow().element_type());
+
                 // TODO: move the props to the fiber since keeping child_element wont be necessary (Option::take)
-                child_fiber.set_props(Rc::clone(&child_element.props()));
+                // child_fiber.set_props(Rc::clone(&child_element.props()));
+                child_fiber.set_props(child_element.props_mut().take());
+                let element_children = child_element.children_mut().take().map(|children| {
+                    Rc::new(RefCell::new(children))
+                });
+                child_fiber.set_element_children(element_children);
 
                 if let Some(old_child) = &old_child_fiber {
                     // relate to alternate
@@ -192,7 +208,12 @@ impl Context {
                 child_fiber
             } else {
                 let mut child_fiber = Fiber::new(&child_element.element_type());
-                child_fiber.set_props(Rc::clone(&child_element.props()));
+
+                child_fiber.set_props(child_element.props_mut().take());
+                let element_children = child_element.children_mut().take().map(|children| {
+                    Rc::new(RefCell::new(children))
+                });
+                child_fiber.set_element_children(element_children);
 
                 // relate to parent (current fiber)
                 child_fiber.set_parent(Rc::clone(wip_unit));
@@ -254,20 +275,12 @@ impl Context {
         }
 
         let fiber = fiber.as_ref().unwrap();
-
         let mut parent_dom_node = None;
 
-        
-        // let a = fiber.borrow().parents().count();
-        // unsafe { log(&format!("number of parents of {}: {}", fiber.borrow().element_type(), a)); }
-
-        unsafe { log(&format!("looking for parents")); }
         for parent in fiber.parents() {
             let parent = parent.borrow();
-            unsafe { log(&format!("found dom node for parent: {}", parent.element_type())); }
 
             if let Some(dom_node) = parent.dom_node() {
-
                 parent_dom_node = Some(Rc::clone(dom_node));
                 break;
             }
@@ -293,7 +306,6 @@ impl Context {
     fn commit_node_append(&self, fiber: &FiberCell, parent_dom_node: Option<Rc<RefCell<Node>>>) -> Result<(), JsValue> {
         let has_dom_node = fiber.borrow().dom_node().is_some();
         let has_parent_node = parent_dom_node.is_some();
-        unsafe { log(&format!("{}, {}", has_dom_node.to_string(), has_parent_node.to_string())); }
 
         if has_dom_node && has_parent_node {
             let fiber = fiber.borrow();
@@ -335,7 +347,9 @@ pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) 
     let mut root = Fiber::new_root();
     
     // The root element will be the Root fiber's only child
-    root.set_element_children(vec![Rc::new(RefCell::new(element))]);
+    let mut children = Vec::with_capacity(1);
+    children.push(element);
+    root.set_element_children(Some(Rc::new(RefCell::new(children))));
 
     // Store the container HTML element
     root.set_dom_node(Rc::new(RefCell::new(Node::Element(container))));

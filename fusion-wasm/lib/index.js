@@ -4,7 +4,7 @@ import {
   create_props,
   get_context,
   work_loop,
-  render as render_internal
+  render as render_internal,
 } from "../pkg/fusion_wasm.js";
 
 let NULL = "";
@@ -31,7 +31,11 @@ function createElement(type, props = {}, ...rawChildren) {
     } else {
       return x;
     }
-  }).filter(x => x instanceof Element);
+  })
+  
+  children = children.filter(x => {
+    return x.constructor.name === "Element";
+  });
 
   let elementProps = create_props(
     props.className || NULL,

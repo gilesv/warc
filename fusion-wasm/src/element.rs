@@ -2,9 +2,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::convert::FromWasmAbi;
 use web_sys::{Element as HTMLElement, Text as HTMLText};
 use js_sys::Reflect;
-use std::cell::RefCell;
-use std::rc::Rc;
-use super::{TEXT_ELEMENT};
+use super::{TEXT_ELEMENT, console_log, log};
 
 pub enum Node {
     Text(HTMLText),
@@ -14,18 +12,17 @@ pub enum Node {
 #[wasm_bindgen]
 pub struct Element {
     element_type: String,
-    props: Rc<RefCell<ElementProps>>,
-    children: Vec<Rc<RefCell<Element>>>,
+    props: Option<ElementProps>,
+    children: Option<Vec<Element>>,
 }
 
 impl Element {
     pub fn new(
         element_type: String,
         props: ElementProps,
-        children: Vec<Rc<RefCell<Element>>>,
+        children: Vec<Element>,
     ) -> Element {
-        let props = Rc::new(RefCell::new(props));
-        Element { element_type, props, children }
+        Element { element_type, props: Some(props), children: Some(children) }
     }
 
     pub fn from_js_value(js_value: &JsValue) -> Result<Element, JsValue> {
@@ -44,12 +41,20 @@ impl Element {
         &self.element_type
     }
 
-    pub fn props(&self) -> &Rc<RefCell<ElementProps>> {
+    pub fn props(&self) -> &Option<ElementProps> {
         &self.props
     }
 
-    pub fn children(&self) -> &Vec<Rc<RefCell<Element>>> {
+    pub fn props_mut(&mut self) -> &mut Option<ElementProps> {
+        &mut self.props
+    }
+
+    pub fn children(&self) -> &Option<Vec<Element>> {
         &self.children
+    }
+
+    pub fn children_mut(&mut self) -> &mut Option<Vec<Element>> {
+        &mut self.children
     }
 }
 
@@ -73,22 +78,17 @@ impl ElementProps {
     }
 }
 
-
 #[wasm_bindgen]
 pub fn create_element(
     element_type: String,
     props: ElementProps,
     raw_children: Box<[JsValue]>
 ) -> Element {
-    let children= raw_children.iter()
+    let children: Vec<Element> = raw_children.iter()
         .map(|js_child| {
-            Rc::new(
-                RefCell::new(
-                    Element::from_js_value(js_child).unwrap()
-                )
-            )
+            Element::from_js_value(js_child).unwrap()
         }).collect();
-    
+
     Element::new(element_type, props, children)
 }
 

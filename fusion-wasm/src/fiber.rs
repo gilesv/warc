@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL, log};
+use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
 pub struct Fiber {
     _type: String,
-    props: Option<Rc<RefCell<ElementProps>>>,
-    element_children: Option<Vec<Rc<RefCell<Element>>>>,
+    props: Option<ElementProps>,
+    element_children: Option<Rc<RefCell<Vec<Element>>>>,
     dom_node: Option<Rc<RefCell<Node>>>,
     alternate: Option<FiberCell>,
     parent: Option<FiberCell>,
@@ -71,12 +71,12 @@ impl Fiber {
         self.child.replace(child);
     }
 
-    pub fn props(&self) -> &Option<Rc<RefCell<ElementProps>>> {
+    pub fn props(&self) -> &Option<ElementProps> {
         &self.props
     }
 
-    pub fn set_props(&mut self, props: Rc<RefCell<ElementProps>>) {
-        self.props.replace(props);
+    pub fn set_props(&mut self, props: Option<ElementProps>) {
+        self.props = props;
     }
 
     pub fn parent(&self) -> &Option<FiberCell> {
@@ -103,12 +103,12 @@ impl Fiber {
         self.alternate.replace(alternate);
     }
 
-    pub fn element_children(&self) -> &Option<Vec<Rc<RefCell<Element>>>> {
+    pub fn element_children(&self) -> &Option<Rc<RefCell<Vec<Element>>>> {
         &self.element_children
     }
 
-    pub fn set_element_children(&mut self, children: Vec<Rc<RefCell<Element>>>) {
-        self.element_children.replace(children);
+    pub fn set_element_children(&mut self, children: Option<Rc<RefCell<Vec<Element>>>>) {
+        self.element_children = children;
     }
 
     pub fn effect(&self) -> &Option<FiberEffect> {
