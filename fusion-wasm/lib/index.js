@@ -7,8 +7,6 @@ import {
   render as render_internal,
 } from "../pkg/fusion_wasm.js";
 
-let NULL = "";
-
 let context = get_context();
 
 function render(element, parentDom) {
@@ -38,8 +36,8 @@ function createElement(type, props = {}, ...rawChildren) {
   });
 
   let elementProps = create_props(
-    props.className || NULL,
-    props.nodeValue || NULL
+    props.className || null,
+    props.nodeValue || null
   );
 
   return create_element(type, elementProps, children);

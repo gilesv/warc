@@ -118,6 +118,14 @@ impl Fiber {
     pub fn set_effect(&mut self, effect: FiberEffect) {
         self.effect.replace(effect);
     }
+
+    pub fn has_props_changed(&self, other_props: &ElementProps) -> bool {
+        if let Some(props) = self.props() {
+            props == other_props
+        } else {
+            true
+        }
+    }
 }
 
 pub trait FiberParentIterator {

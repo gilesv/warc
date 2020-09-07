@@ -126,7 +126,7 @@ impl Context {
         let props = fiber.props().unwrap();
 
         if fiber.is_text_fiber() {
-            let node: HTMLText = self.document.create_text_node(&props.node_value());
+            let node: HTMLText = self.document.create_text_node(&props.node_value().unwrap());
 
             Node::Text(node)
         } else {
@@ -138,12 +138,37 @@ impl Context {
     }
 
     fn update_dom_node(&self, dom_node: &HTMLElement, prev_props: Option<&ElementProps>, next_props: &ElementProps) {
-        // TODO: use prev_props here to update properly
-        dom_node.set_class_name(&next_props.class_name());
+        let prev_class_name = prev_props.and_then(|p| p.class_name());
+        let next_class_name = next_props.class_name();
+
+        match (prev_class_name, next_class_name) {
+            (Some(prev), Some(next)) => {
+                if *prev != *next {
+                    dom_node.set_class_name(next);
+                }
+            },
+            (None, Some(next)) => {
+                dom_node.set_class_name(next);
+            },
+            (_, _) => {}
+        }
     }
 
-    fn update_dom_text(&self, text_node: &HTMLText, node_value: &String) {
-        text_node.set_node_value(Some(node_value));
+    fn update_dom_text(&self, text_node: &HTMLText, prev_props: Option<&ElementProps>, next_props: &ElementProps) {
+        let prev_value = prev_props.and_then(|p| p.node_value());
+        let next_value = next_props.node_value();
+
+        match (prev_value, next_value) {
+            (Some(prev), Some(next)) => {
+                if *prev != *next {
+                    text_node.set_node_value(Some(next));
+                }
+            },
+            (None, Some(next)) => {
+                text_node.set_node_value(Some(next));
+            },
+            (_, _) => {}
+        }
     }
 
     fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
@@ -303,14 +328,13 @@ impl Context {
 
                 if let Some(dom_node) = fiber.dom_node() {
                     if let Some(alternate) = fiber.alternate() {
+                        let alternate = alternate.borrow();
+                        let prev_props = alternate.props();
                         let next_props = fiber.props().unwrap();
                         let node= &*dom_node.borrow();
 
                         match node {
                             Node::Element(node) => {
-                                let alternate = alternate.borrow();
-                                let prev_props = alternate.props();
-
                                 self.update_dom_node(
                                     &node,
                                     prev_props,
@@ -318,7 +342,11 @@ impl Context {
                                 );
                             },
                             Node::Text(text) => {
-                                self.update_dom_text(text, next_props.node_value())
+                                self.update_dom_text(
+                                    text,
+                                    prev_props,
+                                    next_props
+                                );
                             }
                         }
                     }

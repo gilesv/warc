@@ -21,7 +21,7 @@ import("fusion-wasm").then(({ default: Fusion }: any) => {
   Fusion.render(a, document.getElementById("root") as any);
 
   setTimeout(() => {
-    let b = <div className="AAA">
+    let b = <div className="yeah">
       <style>{".yeah { background: red; }"}</style>
       <h2>If you can read this...</h2>
       <h1>it's UPDATING!</h1>
