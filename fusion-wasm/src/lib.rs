@@ -37,7 +37,6 @@ pub struct Context {
     next_unit_of_work: Option<FiberCell>,
     wip_functional_fiber: Option<Fiber>,
     hook_index: usize,
-    window: Window,
     document: Document
 }
 
@@ -53,7 +52,6 @@ impl Context {
             next_unit_of_work: None,
             wip_functional_fiber: None,
             hook_index: 0,
-            window,
             document
         }
     }
@@ -125,7 +123,7 @@ impl Context {
     }
 
     fn create_dom_node(&self, fiber: &Fiber) -> Node {
-        let props = fiber.props().as_ref().unwrap();
+        let props = fiber.props().unwrap();
 
         if fiber.is_text_fiber() {
             let node: HTMLText = self.document.create_text_node(&props.node_value());
@@ -133,14 +131,19 @@ impl Context {
             Node::Text(node)
         } else {
             let node = self.document.create_element(fiber.element_type()).unwrap();
-            self.update_dom_node(&node, &props);
+            self.update_dom_node(&node, None, &props);
 
             Node::Element(node)
         }
     }
 
-    fn update_dom_node(&self, dom_node: &HTMLElement, props: &ElementProps) {
-        dom_node.set_class_name(&props.class_name());
+    fn update_dom_node(&self, dom_node: &HTMLElement, prev_props: Option<&ElementProps>, next_props: &ElementProps) {
+        // TODO: use prev_props here to update properly
+        dom_node.set_class_name(&next_props.class_name());
+    }
+
+    fn update_dom_text(&self, text_node: &HTMLText, node_value: &String) {
+        text_node.set_node_value(Some(node_value));
     }
 
     fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
@@ -164,7 +167,7 @@ impl Context {
         };
 
         while i < children_len || old_child_fiber.is_some() {
-            let mut child_element = &mut children.unwrap().borrow_mut()[i];
+            let child_element = &mut children.unwrap().borrow_mut()[i];
 
             let has_same_type = if let Some(old_child_cell) = &old_child_fiber {
                 let old_child = old_child_cell.borrow();
@@ -178,14 +181,15 @@ impl Context {
 
             // Generate a new Fiber for the updated node
             let child_fiber = if has_same_type {
+                // TODO: use same fiber instead of creating new ones
                 let mut child_fiber = Fiber::new(&old_child_fiber.as_ref().unwrap().borrow().element_type());
 
-                // TODO: move the props to the fiber since keeping child_element wont be necessary (Option::take)
-                // child_fiber.set_props(Rc::clone(&child_element.props()));
                 child_fiber.set_props(child_element.props_mut().take());
+
                 let element_children = child_element.children_mut().take().map(|children| {
                     Rc::new(RefCell::new(children))
                 });
+
                 child_fiber.set_element_children(element_children);
 
                 if let Some(old_child) = &old_child_fiber {
@@ -232,11 +236,14 @@ impl Context {
             if old_child_fiber.is_some() {
                 let old_child_sibling = {
                     let old_child = old_child_fiber.as_ref().unwrap().borrow();
-                    let sibling = old_child.sibling().as_ref().unwrap();
-                    Rc::clone(sibling)
+                    if let Some(sibling) = old_child.sibling() {
+                        Some(Rc::clone(sibling))
+                    } else {
+                        None
+                    }
                 };
 
-                old_child_fiber = Some(old_child_sibling);
+                old_child_fiber = old_child_sibling;
             }
 
             let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
@@ -261,8 +268,8 @@ impl Context {
 
     fn commit_root(&mut self) {
         if self.wip_root.is_some() {
-
             let wip_root_fiber = self.wip_root.as_ref().unwrap();
+
             self.commit_work(&wip_root_fiber.borrow().child());
             self.current_root = Some(Rc::clone(wip_root_fiber));
             self.wip_root = None;
@@ -275,23 +282,47 @@ impl Context {
         }
 
         let fiber = fiber.as_ref().unwrap();
-        let mut parent_dom_node = None;
-
-        for parent in fiber.parents() {
-            let parent = parent.borrow();
-
-            if let Some(dom_node) = parent.dom_node() {
-                parent_dom_node = Some(Rc::clone(dom_node));
-                break;
-            }
-        }
 
         match fiber.borrow().effect().as_ref() {
             Some(FiberEffect::Placement) => {
+                let mut parent_dom_node = None;
+
+                for parent in fiber.parents() {
+                    let parent = parent.borrow();
+
+                    if let Some(dom_node) = parent.dom_node() {
+                        parent_dom_node = Some(Rc::clone(dom_node));
+                        break;
+                    }
+                }
+
                 self.commit_node_append(&fiber, parent_dom_node);
             },
             Some(FiberEffect::Update) => {
+                let fiber = fiber.borrow();
 
+                if let Some(dom_node) = fiber.dom_node() {
+                    if let Some(alternate) = fiber.alternate() {
+                        let next_props = fiber.props().unwrap();
+                        let node= &*dom_node.borrow();
+
+                        match node {
+                            Node::Element(node) => {
+                                let alternate = alternate.borrow();
+                                let prev_props = alternate.props();
+
+                                self.update_dom_node(
+                                    &node,
+                                    prev_props,
+                                    next_props
+                                );
+                            },
+                            Node::Text(text) => {
+                                self.update_dom_text(text, next_props.node_value())
+                            }
+                        }
+                    }
+                }
             },
             Some(FiberEffect::Deletion) => {
 
@@ -309,7 +340,7 @@ impl Context {
 
         if has_dom_node && has_parent_node {
             let fiber = fiber.borrow();
-            let dom_node = fiber.dom_node().as_ref().unwrap();
+            let dom_node = fiber.dom_node().unwrap();
             let parent_node = parent_dom_node.unwrap();
 
             let dom_node = &*dom_node.borrow();
@@ -353,6 +384,11 @@ pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) 
 
     // Store the container HTML element
     root.set_dom_node(Rc::new(RefCell::new(Node::Element(container))));
+
+    // Set the current root as the alternate root
+    if let Some(current_root) = context.current_root.as_ref() {
+        root.set_alternate(Rc::clone(current_root));
+    }
 
     // Make it the Work in Progress Root and the Next Unit of Work
     let root = Rc::new(RefCell::new(Box::new(root)));

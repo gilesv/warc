@@ -51,8 +51,8 @@ impl Fiber {
         &self._type == FIBER_ROOT
     }
 
-    pub fn dom_node(&self) -> &Option<Rc<RefCell<Node>>> {
-        &self.dom_node
+    pub fn dom_node(&self) -> Option<&Rc<RefCell<Node>>> {
+        self.dom_node.as_ref()
     }
 
     pub fn set_dom_node(&mut self, dom_node: Rc<RefCell<Node>>) {
@@ -71,8 +71,8 @@ impl Fiber {
         self.child.replace(child);
     }
 
-    pub fn props(&self) -> &Option<ElementProps> {
-        &self.props
+    pub fn props(&self) -> Option<&ElementProps> {
+        self.props.as_ref()
     }
 
     pub fn set_props(&mut self, props: Option<ElementProps>) {
@@ -95,8 +95,8 @@ impl Fiber {
         self.sibling.replace(sibling);
     }
 
-    pub fn alternate(&self) -> &Option<FiberCell> {
-        &self.alternate
+    pub fn alternate(&self) -> Option<&FiberCell> {
+        self.alternate.as_ref()
     }
 
     pub fn set_alternate(&mut self, alternate: FiberCell) {
@@ -153,6 +153,7 @@ impl Iterator for FiberParentsIter {
     }
 }
 
+#[derive(Debug)]
 pub enum FiberEffect {
     Placement,
     Update,
