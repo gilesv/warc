@@ -64,7 +64,7 @@ impl Context {
         Ok(foo)
     }
 
-    fn work_loop(&mut self, did_timeout: bool) {
+    fn work_loop(&mut self, did_timeout: bool) -> Result<(), JsValue> {
         let mut no_next_unit_of_work = self.next_unit_of_work.is_none();
 
         loop {
@@ -78,8 +78,10 @@ impl Context {
         }
 
         if no_next_unit_of_work && self.wip_root.is_some() {
-            self.commit_root();
+            self.commit_root()?;
         }
+
+        Ok(())
     }
 
     fn perform_unit_of_work(&mut self) -> Option<FiberCell> {
@@ -291,19 +293,21 @@ impl Context {
         }
     }
 
-    fn commit_root(&mut self) {
+    fn commit_root(&mut self) -> Result<(), JsValue> {
         if self.wip_root.is_some() {
             let wip_root_fiber = self.wip_root.as_ref().unwrap();
 
-            self.commit_work(&wip_root_fiber.borrow().child());
+            self.commit_work(&wip_root_fiber.borrow().child())?;
             self.current_root = Some(Rc::clone(wip_root_fiber));
             self.wip_root = None;
         }
+
+        Ok(())
     }
 
-    fn commit_work(&self, fiber: &Option<FiberCell>) {
+    fn commit_work(&self, fiber: &Option<FiberCell>) -> Result<(), JsValue> {
         if fiber.is_none() {
-            return;
+            return Ok(());
         }
 
         let fiber = fiber.as_ref().unwrap();
@@ -321,7 +325,7 @@ impl Context {
                     }
                 }
 
-                self.commit_node_append(&fiber, parent_dom_node);
+                self.commit_node_append(&fiber, parent_dom_node)?;
             },
             Some(FiberEffect::Update) => {
                 let fiber = fiber.borrow();
@@ -358,8 +362,10 @@ impl Context {
             None => {}
         }
 
-        self.commit_work(&fiber.borrow().child());
-        self.commit_work(&fiber.borrow().sibling());
+        self.commit_work(&fiber.borrow().child())?;
+        self.commit_work(&fiber.borrow().sibling())?;
+
+        Ok(())
     }
 
     fn commit_node_append(&self, fiber: &FiberCell, parent_dom_node: Option<Rc<RefCell<Node>>>) -> Result<(), JsValue> {
