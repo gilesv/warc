@@ -21,10 +21,11 @@ import("fusion-wasm").then(({ default: Fusion }: any) => {
   Fusion.render(a, document.getElementById("root") as any);
 
   setTimeout(() => {
-    let b = <div className="yeah">
+    let b = <div className="yeahH">
       <style>{".yeah { background: red; }"}</style>
       <h2>If you can read this...</h2>
       <h1>it's UPDATING!</h1>
+      <h3>hai</h3>
       <span>p.s.: WASM Reconciler</span>
       <br></br><span>COBRA KAAAI!!!</span>
     </div>;

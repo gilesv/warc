@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
+use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL, console_log, log};
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
@@ -13,7 +13,8 @@ pub struct Fiber {
     parent: Option<FiberCell>,
     sibling: Option<FiberCell>,
     child: Option<FiberCell>,
-    effect: Option<FiberEffect>,
+    effect_tag: Option<FiberEffect>,
+    next_effect: Option<FiberCell>
 }
 
 impl Fiber {
@@ -27,7 +28,8 @@ impl Fiber {
             parent: None,
             sibling: None,
             child: None,
-            effect: None
+            effect_tag: None,
+            next_effect: None,
         }
     }
 
@@ -111,17 +113,29 @@ impl Fiber {
         self.element_children = children;
     }
 
-    pub fn effect(&self) -> &Option<FiberEffect> {
-        &self.effect
+    pub fn effect_tag(&self) -> Option<&FiberEffect> {
+        self.effect_tag.as_ref()
     }
 
-    pub fn set_effect(&mut self, effect: FiberEffect) {
-        self.effect.replace(effect);
+    pub fn set_effect_tag(&mut self, effect: FiberEffect) {
+        self.effect_tag.replace(effect);
+    }
+
+    pub fn next_effect(&self) -> Option<&FiberCell> {
+        self.next_effect.as_ref()
+    }
+
+    pub fn next_effect_mut(&mut self) -> &mut Option<FiberCell> {
+        &mut self.next_effect
+    }
+
+    pub fn set_next_effect(&mut self, next_effect: FiberCell) {
+        self.next_effect.replace(next_effect);
     }
 
     pub fn has_props_changed(&self, other_props: &ElementProps) -> bool {
         if let Some(props) = self.props() {
-            props == other_props
+            !(props == other_props)
         } else {
             true
         }

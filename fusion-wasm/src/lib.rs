@@ -30,12 +30,14 @@ macro_rules! console_log {
     ($($t:tt)*) => (unsafe { log(&format_args!($($t)*).to_string()); })
 }
 
-#[wasm_bindgen(inspectable)]
+#[wasm_bindgen]
 pub struct Context {
     wip_root: Option<FiberCell>,
     current_root: Option<FiberCell>,
     next_unit_of_work: Option<FiberCell>,
     wip_functional_fiber: Option<Fiber>,
+    first_effect: Option<FiberCell>,
+    last_effect: Option<FiberCell>,
     hook_index: usize,
     document: Document
 }
@@ -51,9 +53,24 @@ impl Context {
             current_root: None,
             next_unit_of_work: None,
             wip_functional_fiber: None,
+            first_effect: None,
+            last_effect: None,
             hook_index: 0,
             document
         }
+    }
+
+    fn add_effect(&mut self, effect: &FiberCell) {
+        if self.first_effect.is_some() {
+            if let Some(last) = self.last_effect.as_ref() {
+                last.borrow_mut().set_next_effect(Rc::clone(effect))
+            }
+        } else {
+            self.first_effect.replace(Rc::clone(effect));
+        }
+
+        self.last_effect.replace(Rc::clone(effect));
+        console_log!("{} effect added", self.last_effect.as_ref().unwrap().borrow().element_type());
     }
 
     fn from_js_value(js_value: &JsValue) -> Result<Context, JsValue> {
@@ -72,7 +89,8 @@ impl Context {
                 break;
             }
 
-            self.next_unit_of_work = self.perform_unit_of_work();
+            let wip_fiber = Rc::clone(&self.next_unit_of_work.as_ref().unwrap());
+            self.next_unit_of_work = self.perform_unit_of_work(wip_fiber);
             
             no_next_unit_of_work = self.next_unit_of_work.is_none();
         }
@@ -84,9 +102,8 @@ impl Context {
         Ok(())
     }
 
-    fn perform_unit_of_work(&mut self) -> Option<FiberCell> {
-        let wip_unit = self.next_unit_of_work.as_ref().unwrap();
-        let mut fiber = wip_unit.borrow_mut();
+    fn perform_unit_of_work(&mut self, wip_fiber: FiberCell) -> Option<FiberCell> {
+        let mut fiber = wip_fiber.borrow_mut();
 
         if fiber.is_functional_tree() {
             todo!();
@@ -98,7 +115,7 @@ impl Context {
                 fiber.set_dom_node(Rc::new(RefCell::new(dom_node)));
             }
 
-            self.reconcile_children(wip_unit, &mut fiber);
+            self.reconcile_children(&wip_fiber, &mut fiber);
         }
 
         // If fiber has a child, make it the next unit of work
@@ -114,7 +131,7 @@ impl Context {
             // Drop the mutable borrow to avoid crashing when looping through the parents
             mem::drop(fiber);
 
-            for parent in wip_unit.parents() {
+            for parent in wip_fiber.parents() {
                 if let Some(parent_sibling) = &parent.borrow().sibling() {
                     return Some(Rc::clone(parent_sibling));
                 }
@@ -173,7 +190,7 @@ impl Context {
         }
     }
 
-    fn reconcile_children(&self, wip_unit: &FiberCell, fiber: &mut Fiber) {
+    fn reconcile_children(&mut self, wip_unit: &FiberCell, fiber: &mut Fiber) {
         let children = fiber.element_children().as_ref();
         let children_len = children.map_or(0, |children| { children.borrow().len() });
 
@@ -193,23 +210,21 @@ impl Context {
             None
         };
 
-        while i < children_len || old_child_fiber.is_some() {
+        while i < children_len || old_child_fiber.as_ref().is_some() {
             let child_element = &mut children.unwrap().borrow_mut()[i];
 
-            let has_same_type = if let Some(old_child_cell) = &old_child_fiber {
-                let old_child = old_child_cell.borrow();
+            let has_same_type = old_child_fiber.as_ref().map_or(false, |old_child| {
+                let old_child = old_child.borrow();
                 let old_child_type = old_child.element_type();
                 let new_child_type = child_element.element_type();
 
                 *old_child_type == *new_child_type
-            } else {
-                false
-            };
+            });
 
             // Generate a new Fiber for the updated node
             let child_fiber = if has_same_type {
-                // TODO: use same fiber instead of creating new ones
-                let mut child_fiber = Fiber::new(&old_child_fiber.as_ref().unwrap().borrow().element_type());
+                let alternate_child = old_child_fiber.as_ref().unwrap();
+                let mut child_fiber = Fiber::new(&alternate_child.borrow().element_type());
 
                 child_fiber.set_props(child_element.props_mut().take());
 
@@ -219,22 +234,23 @@ impl Context {
 
                 child_fiber.set_element_children(element_children);
 
-                if let Some(old_child) = &old_child_fiber {
-                    // relate to alternate
-                    child_fiber.set_alternate(Rc::clone(&old_child));
+                // relate to alternate
+                child_fiber.set_alternate(Rc::clone(&alternate_child));
 
-                    // set existing dom node
-                    if let Some(old_child_node) = old_child.borrow().dom_node() {
-                        child_fiber.set_dom_node(Rc::clone(old_child_node));
-                    }
+                // set existing dom node
+                if let Some(old_child_node) = alternate_child.borrow().dom_node() {
+                    child_fiber.set_dom_node(Rc::clone(old_child_node));
                 }
 
                 // relate to parent (current fiber)
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
-                // TODO: set an effect only if props really changed
-                child_fiber.set_effect(FiberEffect::Update);
+                if let Some(old_props) = alternate_child.borrow().props() {
+                    if child_fiber.has_props_changed(old_props) {
+                        child_fiber.set_effect_tag(FiberEffect::Update);
+                    }
+                }
 
                 child_fiber
             } else {
@@ -250,14 +266,15 @@ impl Context {
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
-                child_fiber.set_effect(FiberEffect::Placement);
+                child_fiber.set_effect_tag(FiberEffect::Placement);
 
                 child_fiber
             };
 
             if old_child_fiber.is_some() && !has_same_type {
-                old_child_fiber.as_ref().unwrap().borrow_mut().set_effect(FiberEffect::Deletion);
+                old_child_fiber.as_ref().unwrap().borrow_mut().set_effect_tag(FiberEffect::Deletion);
                 // TODO: PUSH OLD CHILD FIBER TO DELETION ARRAY
+                self.add_effect(&old_child_fiber.as_ref().unwrap());
             }
 
             if old_child_fiber.is_some() {
@@ -297,6 +314,10 @@ impl Context {
         if self.wip_root.is_some() {
             let wip_root_fiber = self.wip_root.as_ref().unwrap();
 
+            for effect in self.effects() {
+                console_log!("consumed effect");
+            }
+
             self.commit_work(&wip_root_fiber.borrow().child())?;
             self.current_root = Some(Rc::clone(wip_root_fiber));
             self.wip_root = None;
@@ -312,7 +333,7 @@ impl Context {
 
         let fiber = fiber.as_ref().unwrap();
 
-        match fiber.borrow().effect().as_ref() {
+        match fiber.borrow().effect_tag() {
             Some(FiberEffect::Placement) => {
                 let mut parent_dom_node = None;
 
@@ -395,6 +416,50 @@ impl Context {
         }
 
         Ok(())
+    }
+}
+
+
+pub struct EffectListIter {
+    next: Option<FiberCell>
+}
+
+pub trait EffectListIterator {
+    fn effects(&self) -> EffectListIter;
+}
+
+impl EffectListIterator for Context {
+    fn effects(&self) -> EffectListIter {
+        let next = self.first_effect.as_ref().map(|first| Rc::clone(first));
+        console_log!("effects. next is some? {}", next.is_some());
+        EffectListIter {
+            next
+        }
+    }
+}
+
+impl Iterator for EffectListIter {
+    type Item = FiberCell;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        console_log!("next");
+        let next = self.next.as_ref()
+            .and_then(|effect| {
+                effect.borrow_mut()
+                    .next_effect_mut()
+                    .take() // consumes the effect once its read for the 1st time
+            });
+
+        if let Some(next) = next.as_ref() {
+            console_log!("next effect: {}", next.borrow().element_type());
+        }
+
+        self.next = next.as_ref().map(|next| {
+            console_log!("consumed effect: {}", next.borrow().element_type());
+            Rc::clone(next)
+        });
+
+        return next;
     }
 }
 
