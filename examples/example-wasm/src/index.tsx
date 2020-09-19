@@ -10,30 +10,269 @@ declare global {
 
 // @ts-ignore
 import("fusion-wasm").then(({ default: Fusion }: any) => {
-  let a = <div className="yeah">
-    <style>{".yeah { background: red; }"}</style>
-    <h2>If you can read this...</h2>
-    <h1>it's WORKING!</h1>
-    <span>p.s.: WASM Reconciler</span>
-  </div>;
+  function Note(props: any) {
+    return <note-name className="note">✅ {props.name}</note-name>
+  };
 
-  // let a = <h1>Hello</h1>;
-  Fusion.render(a, document.getElementById("root") as any);
+  function App(props: any) {
+    const notes = props.notes;
 
+    return (
+      <main>
+        <h2>Melhores séries</h2>
+        {
+          notes.map((name: string) =>{
+            return <Note name={name} />
+          })
+        }
+        <status>it's {props.status}</status>
+      </main>
+    );
+  }
+
+  let notes = [
+    "Cobra Kai",
+    "Dark",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+    "Game of Thrones",
+  ];
+
+  Fusion.render(<App status="WORKING" notes={notes} />, document.getElementById("root") as any);
+  
   setTimeout(() => {
-    let b = <div className="yeahH">
-      <style>{".yeah { background: red; }"}</style>
-      <h2>If you can read this...</h2>
-      <h1>it's UPDATING!!!! AND DELETING</h1>
-      <h3>hai</h3>
-      <span>p.s.: WASM Reconciler</span>
-      <br></br><span>COBRA KAAAI!!!</span>
-    </div>;
-
-    // let b = <h1>World</h1>;
-    Fusion.render(b, document.getElementById("root") as any);
-  }, 3000);
-})
-
-
-
+    notes.push("Jane the virgin");
+    Fusion.render(<App status="UPDATING" notes={notes} />, document.getElementById("root") as any);
+  }, 5000);
+});

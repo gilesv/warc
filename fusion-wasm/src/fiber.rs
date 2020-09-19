@@ -1,3 +1,4 @@
+use wasm_bindgen::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL, console_log, log};
@@ -14,6 +15,9 @@ pub struct Fiber {
     sibling: Option<FiberCell>,
     child: Option<FiberCell>,
     effect_tag: Option<FiberEffect>,
+
+    component_function: Option<js_sys::Function>,
+    component_function_props: Option<JsValue>,
 }
 
 impl Fiber {
@@ -28,6 +32,8 @@ impl Fiber {
             sibling: None,
             child: None,
             effect_tag: None,
+            component_function: None,
+            component_function_props: None,
         }
     }
 
@@ -125,6 +131,22 @@ impl Fiber {
         } else {
             true
         }
+    }
+
+    pub fn component_function(&self) -> Option<&js_sys::Function> {
+        self.component_function.as_ref()
+    }
+
+    pub fn set_component_function(&mut self, func: Option<js_sys::Function>) {
+        self.component_function = func;
+    }
+
+    pub fn component_function_props(&self) -> Option<&JsValue> {
+        self.component_function_props.as_ref()
+    }
+
+    pub fn set_component_function_props(&mut self, props: Option<JsValue>) {
+        self.component_function_props = props;
     }
 }
 

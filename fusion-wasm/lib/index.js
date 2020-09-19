@@ -1,6 +1,7 @@
 import {
   create_element,
   create_text_element,
+  create_functional_component,
   create_props,
   get_context,
   work_loop,
@@ -23,7 +24,7 @@ function workLoop(deadline) {
 
 function createElement(type, props = {}, ...rawChildren) {
   props = props || {};
-  let children = rawChildren.map(x => {
+  let children = rawChildren.flat().map(x => {
     if (typeof x === "string") {
       return new create_text_element(x);
     } else {
@@ -35,12 +36,20 @@ function createElement(type, props = {}, ...rawChildren) {
     return x.constructor.name === "Element";
   });
 
-  let elementProps = create_props(
-    props.className || null,
-    props.nodeValue || null
-  );
+  let isFunctionalComponent = typeof type === "function";
 
-  return create_element(type, elementProps, children);
+  if (isFunctionalComponent) {
+    props.children = children;
+
+    return create_functional_component(type, props);
+  } else {
+    let elementProps = create_props(
+      props.className || null,
+      props.nodeValue || null
+    );
+
+    return create_element(type, elementProps, children);
+  }
 }
 
 export default {

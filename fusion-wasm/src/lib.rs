@@ -95,9 +95,18 @@ impl Context {
         let mut fiber = wip_fiber.borrow_mut();
 
         if fiber.is_functional_tree() {
-            todo!();
+            let component_func = &fiber.component_function().unwrap();
+            let func_props = fiber.component_function_props().unwrap();
+
+            let raw_child = component_func.call1(&JsValue::null(), func_props).unwrap();
+            let child = Element::from_js_value(&raw_child).unwrap();
+            let children_vec = vec![child];
+            // console_log!("number of children of _F: {}", children_vec.len());
+            fiber.set_element_children(Some(Rc::new(RefCell::new(children_vec))));
+
+            self.reconcile_children(&wip_fiber, &mut fiber);
         } else {
-            // updateRegularTree
+            // console_log!("performing work for {}", fiber.element_type());
             if fiber.dom_node().is_none() {
                 let dom_node = self.create_dom_node(&fiber);
 
@@ -107,16 +116,25 @@ impl Context {
             self.reconcile_children(&wip_fiber, &mut fiber);
         }
 
+        // Add to effect list
+        if fiber.effect_tag().is_some() {
+            self.add_effect(Rc::clone(&wip_fiber));
+        }
+
         // If fiber has a child, make it the next unit of work
         if let Some(fiber_child) = &fiber.child() {
+            // console_log!("{} has a child", &fiber.element_type());
             return Some(Rc::clone(fiber_child));
 
         // ...or if it has a sibling, make it the next unit of work
         } else if let Some(fiber_sibling) = &fiber.sibling() {
+            // console_log!("{} has a sibling", &fiber.element_type());
             return Some(Rc::clone(fiber_sibling));
 
         // Otherwise look for the closest parent's sibling
         } else {
+            // console_log!("{} has no child or sibling. coming back to parents", &fiber.element_type());
+
             // Drop the mutable borrow to avoid crashing when looping through the parents
             mem::drop(fiber);
 
@@ -211,7 +229,7 @@ impl Context {
             });
 
             // Generate a new Fiber for the updated node
-            let child_fiber = if has_same_type {
+            let mut child_fiber = if has_same_type {
                 let alternate_child = old_child_fiber.as_ref().unwrap();
                 let mut child_fiber = Fiber::new(&alternate_child.borrow().element_type());
 
@@ -235,10 +253,12 @@ impl Context {
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
-                if let Some(old_props) = alternate_child.borrow().props() {
-                    if child_fiber.has_props_changed(old_props) {
-                        child_fiber.set_effect_tag(FiberEffect::Update);
-                        console_log!("added UPDATE effect for {}", &child_fiber.element_type());
+                if true || !child_fiber.is_functional_tree() {
+                    if let Some(old_props) = alternate_child.borrow().props() {
+                        if child_fiber.has_props_changed(old_props) {
+                            child_fiber.set_effect_tag(FiberEffect::Update);
+                            // console_log!("added UPDATE effect for {}", &child_fiber.element_type());
+                        }
                     }
                 }
 
@@ -256,17 +276,24 @@ impl Context {
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
-                child_fiber.set_effect_tag(FiberEffect::Placement);
-                console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
+                if true || !child_fiber.is_functional_tree() {
+                    child_fiber.set_effect_tag(FiberEffect::Placement);
+                    // console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
+                }
 
                 child_fiber
             };
+
+            if child_fiber.is_functional_tree() {
+                child_fiber.set_component_function(child_element.component_function_mut().take());
+                child_fiber.set_component_function_props(child_element.component_function_props_mut().take()); 
+            }
 
             if let Some(old_child_fiber) = old_child_fiber.as_ref() {
                 if !has_same_type {
                     old_child_fiber.borrow_mut().set_effect_tag(FiberEffect::Deletion);
                     self.add_effect(Rc::clone(&old_child_fiber));
-                    console_log!("added deletion effect for {}", old_child_fiber.borrow().element_type());
+                    // console_log!("added deletion effect for {}", old_child_fiber.borrow().element_type());
                 }
             }
 
@@ -284,13 +311,6 @@ impl Context {
             }
 
             let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
-
-            // add effect
-            let has_effect = child_fiber.borrow().effect_tag().is_some();
-
-            if has_effect {
-                self.add_effect(Rc::clone(&child_fiber));
-            }
 
             if i == 0 {
                 first_child_fiber = Some(Rc::clone(&child_fiber));
@@ -341,16 +361,16 @@ impl Context {
                     }
                 }
 
-                console_log!("executing PLACEMENT for {}", fiber.borrow().element_type());
+                // console_log!("executing PLACEMENT for {}", fiber.borrow().element_type());
 
                 self.commit_node_append(&fiber, parent_dom_node)?;
             },
             Some(FiberEffect::Update) => {
-                console_log!("executing UPDATE for {}", fiber.borrow().element_type());
+                // console_log!("executing UPDATE for {}", fiber.borrow().element_type());
                 self.commit_node_update(&fiber)?;
             },
             Some(FiberEffect::Deletion) => {
-                console_log!("executing DELETION for {}", fiber.borrow().element_type());
+                // console_log!("executing DELETION for {}", fiber.borrow().element_type());
                 self.commit_node_deletion(&fiber)?;
             },
             None => {}
