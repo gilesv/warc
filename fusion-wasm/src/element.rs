@@ -1,7 +1,5 @@
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::convert::FromWasmAbi;
 use web_sys::{Element as HTMLElement, Text as HTMLText};
-use js_sys::Reflect;
 use super::{TEXT_ELEMENT, FIBER_FUNCTIONAL, console_log, log};
 
 pub enum Node {
@@ -9,13 +7,12 @@ pub enum Node {
     Element(HTMLElement),
 }
 
-#[wasm_bindgen]
 pub struct Element {
     element_type: String,
     component_function: Option<js_sys::Function>,
     component_function_props: Option<JsValue>,
-    props: Option<ElementProps>,
-    children: Option<Vec<Element>>,
+    props: Option<Box<ElementProps>>,
+    children: Option<Vec<Box<Element>>>,
 }
 
 impl Element {
@@ -23,31 +20,16 @@ impl Element {
         element_type: String,
         component_function: Option<js_sys::Function>,
         component_function_props: Option<JsValue>,
-        props: Option<ElementProps>,
-        children: Vec<Element>,
+        props: Option<Box<ElementProps>>,
+        children: Option<Vec<Box<Element>>>,
     ) -> Element {
         Element {
             element_type,
             component_function,
             component_function_props,
             props,
-            children: Some(children)
+            children
         }
-    }
-
-    pub fn from_js_value(js_value: &JsValue) -> Result<Element, JsValue> {
-        let ptr = unsafe { Reflect::get(&js_value, &JsValue::from_str("ptr"))? };
-        let ptr_u32: u32 = ptr.as_f64().ok_or(JsValue::NULL)? as u32;
-        let foo = unsafe { Element::from_abi(ptr_u32) };
-
-        Ok(foo)
-    }
-
-    pub fn get_children_array_from_js(raw_children: Box<[JsValue]>) -> Vec<Element> {
-        raw_children.iter()
-            .map(|js_child| {
-                Element::from_js_value(js_child).unwrap()
-            }).collect()
     }
 
     pub fn is_text_element(&self) -> bool {
@@ -58,19 +40,19 @@ impl Element {
         &self.element_type
     }
 
-    pub fn props(&self) -> &Option<ElementProps> {
+    pub fn props(&self) -> &Option<Box<ElementProps>> {
         &self.props
     }
 
-    pub fn props_mut(&mut self) -> &mut Option<ElementProps> {
+    pub fn props_mut(&mut self) -> &mut Option<Box<ElementProps>> {
         &mut self.props
     }
 
-    pub fn children(&self) -> &Option<Vec<Element>> {
+    pub fn children(&self) -> &Option<Vec<Box<Element>>> {
         &self.children
     }
 
-    pub fn children_mut(&mut self) -> &mut Option<Vec<Element>> {
+    pub fn children_mut(&mut self) -> &mut Option<Vec<Box<Element>>> {
         &mut self.children
     }
 
@@ -81,9 +63,12 @@ impl Element {
     pub fn component_function_props_mut(&mut self) -> &mut Option<JsValue> {
         &mut self.component_function_props
     }
+
+    pub fn from_ptr(ptr: *mut Element) -> Box<Element> {
+        unsafe { Box::from_raw(ptr) }
+    }
 }
 
-#[wasm_bindgen]
 #[derive(Eq)]
 pub struct ElementProps {
     class_name: Option<String>,
@@ -102,6 +87,10 @@ impl ElementProps {
     pub fn node_value(&self) -> Option<&String> {
         self.node_value.as_ref()
     }
+
+    pub fn from_ptr(ptr: *mut ElementProps) -> Box<ElementProps> {
+        unsafe { Box::from_raw(ptr) }
+    }
 }
 
 impl PartialEq for ElementProps {
@@ -114,43 +103,58 @@ impl PartialEq for ElementProps {
 #[wasm_bindgen]
 pub fn create_element(
     element_type: String,
-    props: ElementProps,
-    raw_children: Box<[JsValue]>
-) -> Element {
-    let children = Element::get_children_array_from_js(raw_children);
+    props_ptr: *mut ElementProps,
+    children_ptr: &[u32]
+) -> *mut Element {
+    let props = ElementProps::from_ptr(props_ptr);
 
-    Element::new(
+    let children = unsafe {
+        children_ptr.iter()
+            .map(|ptr| Element::from_ptr(ptr.clone() as *mut Element))
+            .collect::<Vec<Box<Element>>>()
+    };
+
+    let element = Element::new(
         element_type,
         None,
         None,
         Some(props),
-        children
-    )
+        Some(children)
+    );
+
+    Box::into_raw(Box::new(element))
 }
 
 #[wasm_bindgen]
-pub fn create_text_element(value: String) -> Element {
-    Element::new(
+pub fn create_text_element(value: String) -> *mut Element {
+    let props = ElementProps::new(None, Some(value));
+
+    let element = Element::new(
         String::from(TEXT_ELEMENT), 
         None,
         None,
-        Some(ElementProps::new(None, Some(value))),
-        vec![],
-    )
+        Some(Box::new(props)),
+        None
+    );
+
+    Box::into_raw(Box::new(element))
 }
 
 #[wasm_bindgen]
-pub fn create_functional_component(func: js_sys::Function, props: JsValue) -> Element {
-    Element::new(
+pub fn create_functional_component(func: js_sys::Function, props: JsValue) -> *mut Element {
+    let element = Element::new(
         String::from(FIBER_FUNCTIONAL),
         Some(func),
         Some(props),
         None,
-        vec![]
-    )
+        None
+    );
+
+    Box::into_raw(Box::new(element))
 }
 
 #[wasm_bindgen]
-pub fn create_props(class_name: Option<String>, node_value: Option<String>) -> ElementProps {
-    ElementProps::new(class_name, node_value)
+pub fn create_props(class_name: Option<String>, node_value: Option<String>) -> *mut ElementProps {
+    let props = ElementProps::new(class_name, node_value);
+    Box::into_raw(Box::new(props))
 }

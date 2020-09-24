@@ -26,15 +26,11 @@ function createElement(type, props = {}, ...rawChildren) {
   props = props || {};
   let children = rawChildren.flat().map(x => {
     if (typeof x === "string") {
-      return new create_text_element(x);
+      return create_text_element(x);
     } else {
       return x;
     }
   })
-  
-  children = children.filter(x => {
-    return x.constructor.name === "Element";
-  });
 
   let isFunctionalComponent = typeof type === "function";
 

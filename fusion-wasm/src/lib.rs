@@ -41,7 +41,6 @@ pub struct Context {
     document: Document
 }
 
-#[wasm_bindgen]
 impl Context {
     pub fn new() -> Self {
         let window: Window = web_sys::window().unwrap();
@@ -62,12 +61,8 @@ impl Context {
         self.effects.push(effect);
     }
 
-    fn from_js_value(js_value: &JsValue) -> Result<Context, JsValue> {
-        let ptr = unsafe { Reflect::get(&js_value, &JsValue::from_str("ptr"))? };
-        let ptr_u32: u32 = ptr.as_f64().ok_or(JsValue::NULL)? as u32;
-        let foo = unsafe { Context::from_abi(ptr_u32) };
-
-        Ok(foo)
+    pub fn from_ptr(ptr: *mut Context) -> Box<Context> {
+        unsafe { Box::from_raw(ptr) }
     }
 
     fn work_loop(&mut self, did_timeout: bool) -> Result<(), JsValue> {
@@ -98,11 +93,17 @@ impl Context {
             let component_func = &fiber.component_function().unwrap();
             let func_props = fiber.component_function_props().unwrap();
 
-            let raw_child = component_func.call1(&JsValue::null(), func_props).unwrap();
-            let child = Element::from_js_value(&raw_child).unwrap();
-            let children_vec = vec![child];
-            // console_log!("number of children of _F: {}", children_vec.len());
-            fiber.set_element_children(Some(Rc::new(RefCell::new(children_vec))));
+            let child: Option<Box<Element>> = component_func.call1(&JsValue::null(), func_props)
+                .unwrap()
+                .as_f64()
+                .map(|child_ptr| {
+                    Element::from_ptr(child_ptr as u32 as *mut Element)
+                });
+
+            if let Some(child) = child {
+                let children_vec = vec![child];
+                fiber.set_element_children(Some(Rc::new(RefCell::new(children_vec))));
+            }
 
             self.reconcile_children(&wip_fiber, &mut fiber);
         } else {
@@ -163,7 +164,7 @@ impl Context {
         }
     }
 
-    fn update_dom_node(&self, dom_node: &HTMLElement, prev_props: Option<&ElementProps>, next_props: &ElementProps) {
+    fn update_dom_node(&self, dom_node: &HTMLElement, prev_props: Option<&Box<ElementProps>>, next_props: &Box<ElementProps>) {
         let prev_class_name = prev_props.and_then(|p| p.class_name());
         let next_class_name = next_props.class_name();
 
@@ -180,7 +181,7 @@ impl Context {
         }
     }
 
-    fn update_dom_text(&self, text_node: &HTMLText, prev_props: Option<&ElementProps>, next_props: &ElementProps) {
+    fn update_dom_text(&self, text_node: &HTMLText, prev_props: Option<&Box<ElementProps>>, next_props: &Box<ElementProps>) {
         let prev_value = prev_props.and_then(|p| p.node_value());
         let next_value = next_props.node_value();
 
@@ -457,14 +458,15 @@ impl Context {
 }
 
 #[wasm_bindgen]
-pub fn get_context() -> Context {
-    Context::new()
+pub fn get_context() -> *mut Context {
+    let context = Box::new(Context::new());
+    Box::into_raw(context)
 }
 
 #[wasm_bindgen]
-pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) -> Context {
-    let element = Element::from_js_value(&js_element).unwrap();
-    let mut context = Context::from_js_value(&js_context).unwrap();
+pub fn render(context_ptr: *mut Context, element_ptr: *mut Element, container: HTMLElement) -> *mut Context {
+    let mut context = Context::from_ptr(context_ptr);
+    let element = Element::from_ptr(element_ptr);
 
     // Create the Root fiber
     let mut root = Fiber::new_root();
@@ -487,16 +489,17 @@ pub fn render(js_context: JsValue, js_element: JsValue, container: HTMLElement) 
     context.wip_root = Some(Rc::clone(&root));
     context.next_unit_of_work = Some(Rc::clone(&root));
 
-    context
+    Box::into_raw(context)
 }
 
 
 #[wasm_bindgen]
-pub fn work_loop(context_js: JsValue, did_timeout: bool) -> Context {
+pub fn work_loop(context_ptr: *mut Context, did_timeout: bool) -> *mut Context {
     console_error_panic_hook::set_once();
-    let mut context: Context = Context::from_js_value(&context_js).unwrap();
+
+    let mut context = Context::from_ptr(context_ptr);
 
     context.work_loop(did_timeout);
 
-    context
+    Box::into_raw(context)
 }

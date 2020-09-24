@@ -7,8 +7,8 @@ pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
 pub struct Fiber {
     _type: String,
-    props: Option<ElementProps>,
-    element_children: Option<Rc<RefCell<Vec<Element>>>>,
+    props: Option<Box<ElementProps>>,
+    element_children: Option<Rc<RefCell<Vec<Box<Element>>>>>,
     dom_node: Option<Rc<RefCell<Node>>>,
     alternate: Option<FiberCell>,
     parent: Option<FiberCell>,
@@ -77,11 +77,11 @@ impl Fiber {
         self.child.replace(child);
     }
 
-    pub fn props(&self) -> Option<&ElementProps> {
+    pub fn props(&self) -> Option<&Box<ElementProps>> {
         self.props.as_ref()
     }
 
-    pub fn set_props(&mut self, props: Option<ElementProps>) {
+    pub fn set_props(&mut self, props: Option<Box<ElementProps>>) {
         self.props = props;
     }
 
@@ -109,11 +109,11 @@ impl Fiber {
         self.alternate.replace(alternate);
     }
 
-    pub fn element_children(&self) -> &Option<Rc<RefCell<Vec<Element>>>> {
+    pub fn element_children(&self) -> &Option<Rc<RefCell<Vec<Box<Element>>>>> {
         &self.element_children
     }
 
-    pub fn set_element_children(&mut self, children: Option<Rc<RefCell<Vec<Element>>>>) {
+    pub fn set_element_children(&mut self, children: Option<Rc<RefCell<Vec<Box<Element>>>>>) {
         self.element_children = children;
     }
 
@@ -125,7 +125,7 @@ impl Fiber {
         self.effect_tag.replace(effect);
     }
 
-    pub fn has_props_changed(&self, other_props: &ElementProps) -> bool {
+    pub fn has_props_changed(&self, other_props: &Box<ElementProps>) -> bool {
         if let Some(props) = self.props() {
             !(props == other_props)
         } else {
