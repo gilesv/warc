@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{Element as HTMLElement, Text as HTMLText};
-use super::{TEXT_ELEMENT, FIBER_FUNCTIONAL, console_log, log};
+use super::{TEXT_ELEMENT, FIBER_FUNCTIONAL};
 
 pub enum Node {
     Text(HTMLText),
@@ -28,7 +28,7 @@ impl Element {
             component_function,
             component_function_props,
             props,
-            children
+            children,
         }
     }
 
@@ -73,11 +73,16 @@ impl Element {
 pub struct ElementProps {
     class_name: Option<String>,
     node_value: Option<String>,
+    on_click: Option<js_sys::Function>,
 }
 
 impl ElementProps {
-    pub fn new(class_name: Option<String>, node_value: Option<String>) -> Self {
-        ElementProps { class_name, node_value }
+    pub fn new(
+        class_name: Option<String>,
+        node_value: Option<String>,
+        on_click: Option<js_sys::Function>,
+    ) -> Self {
+        ElementProps { class_name, node_value, on_click }
     }
 
     pub fn class_name(&self) -> Option<&String> {
@@ -88,6 +93,10 @@ impl ElementProps {
         self.node_value.as_ref()
     }
 
+    pub fn on_click(&self) -> Option<&js_sys::Function> {
+        self.on_click.as_ref()
+    }
+
     pub fn from_ptr(ptr: *mut ElementProps) -> Box<ElementProps> {
         unsafe { Box::from_raw(ptr) }
     }
@@ -96,7 +105,8 @@ impl ElementProps {
 impl PartialEq for ElementProps {
     fn eq(&self, other: &Self) -> bool {
         self.class_name == other.class_name &&
-        self.node_value == other.node_value
+        self.node_value == other.node_value &&
+        self.on_click == other.on_click
     }
 }
 
@@ -108,11 +118,9 @@ pub fn create_element(
 ) -> *mut Element {
     let props = ElementProps::from_ptr(props_ptr);
 
-    let children = unsafe {
-        children_ptr.iter()
-            .map(|ptr| Element::from_ptr(ptr.clone() as *mut Element))
-            .collect::<Vec<Box<Element>>>()
-    };
+    let children = children_ptr.iter()
+        .map(|ptr| Element::from_ptr(ptr.clone() as *mut Element))
+        .collect::<Vec<Box<Element>>>();
 
     let element = Element::new(
         element_type,
@@ -127,7 +135,7 @@ pub fn create_element(
 
 #[wasm_bindgen]
 pub fn create_text_element(value: String) -> *mut Element {
-    let props = ElementProps::new(None, Some(value));
+    let props = ElementProps::new(None, Some(value), None);
 
     let element = Element::new(
         String::from(TEXT_ELEMENT), 
@@ -154,7 +162,11 @@ pub fn create_functional_component(func: js_sys::Function, props: JsValue) -> *m
 }
 
 #[wasm_bindgen]
-pub fn create_props(class_name: Option<String>, node_value: Option<String>) -> *mut ElementProps {
-    let props = ElementProps::new(class_name, node_value);
+pub fn create_props(
+    class_name: Option<String>,
+    node_value: Option<String>,
+    on_click: Option<js_sys::Function>
+) -> *mut ElementProps {
+    let props = ElementProps::new(class_name, node_value, on_click);
     Box::into_raw(Box::new(props))
 }

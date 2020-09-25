@@ -11,15 +11,18 @@ declare global {
 // @ts-ignore
 import("fusion-wasm").then(({ default: Fusion }: any) => {
   function Note(props: any) {
-    return <note-name className="note">✅ {props.name}</note-name>
+    const log = () => console.log("clicked: " + props.name);
+    return <note-name className="note" onClick={log}>✅ {props.name}</note-name>
   };
 
   function App(props: any) {
     const notes = props.notes;
-
+    const onClick = () => {
+      alert(props.status);
+    };
     return (
       <main>
-        <h2>Melhores séries</h2>
+        <h2 onClick={onClick}>Melhores séries</h2>
         {
           notes.map((name: string) =>{
             return <Note name={name} />

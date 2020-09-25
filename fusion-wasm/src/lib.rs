@@ -1,7 +1,5 @@
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::convert::FromWasmAbi;
 use web_sys::{Element as HTMLElement, Text as HTMLText, Window, Document};
-use js_sys::Reflect;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::mem;
@@ -168,6 +166,10 @@ impl Context {
         let prev_class_name = prev_props.and_then(|p| p.class_name());
         let next_class_name = next_props.class_name();
 
+        let prev_on_click = prev_props.and_then(|p| p.on_click());
+        let next_on_click = next_props.on_click();
+
+        // Class name
         match (prev_class_name, next_class_name) {
             (Some(prev), Some(next)) => {
                 if *prev != *next {
@@ -176,6 +178,21 @@ impl Context {
             },
             (None, Some(next)) => {
                 dom_node.set_class_name(next);
+            },
+            (_, _) => {}
+        }
+
+        // On Click
+        match (prev_on_click, next_on_click) {
+            (None, Some(callback)) => {
+                dom_node.add_event_listener_with_callback("click", callback).unwrap();
+            },
+            (Some(callback), None) => {
+                dom_node.remove_event_listener_with_callback("click", callback).unwrap();
+            },
+            (Some(prev_callback), Some(next_callback)) => {
+                dom_node.remove_event_listener_with_callback("click", prev_callback).unwrap();
+                dom_node.add_event_listener_with_callback("click", next_callback).unwrap();
             },
             (_, _) => {}
         }
@@ -254,7 +271,7 @@ impl Context {
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
-                if true || !child_fiber.is_functional_tree() {
+                if !child_fiber.is_functional_tree() {
                     if let Some(old_props) = alternate_child.borrow().props() {
                         if child_fiber.has_props_changed(old_props) {
                             child_fiber.set_effect_tag(FiberEffect::Update);
@@ -277,7 +294,7 @@ impl Context {
                 child_fiber.set_parent(Rc::clone(wip_unit));
 
                 // effect
-                if true || !child_fiber.is_functional_tree() {
+                if !child_fiber.is_functional_tree() {
                     child_fiber.set_effect_tag(FiberEffect::Placement);
                     // console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
                 }
@@ -499,7 +516,7 @@ pub fn work_loop(context_ptr: *mut Context, did_timeout: bool) -> *mut Context {
 
     let mut context = Context::from_ptr(context_ptr);
 
-    context.work_loop(did_timeout);
+    context.work_loop(did_timeout).unwrap();
 
     Box::into_raw(context)
 }
