@@ -572,7 +572,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
 
     fiber.add_hook(Rc::clone(&new_hook));
 
-    let set_state = Closure::wrap(Box::new(move |new_state: JsValue| {
+    let set_state = Closure::once_into_js(Box::new(move |new_state: JsValue| {
         *new_hook.borrow_mut() = Hook::State(new_state);
         let mut context = Context::from_ptr(context_ptr);
 
@@ -600,7 +600,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
         context.next_unit_of_work = Some(Rc::clone(&root));
 
         Box::into_raw(context);
-    }) as Box<dyn FnMut(JsValue)>).into_js_value();
+    }) as Box<dyn FnMut(JsValue)>);
 
     fiber.incr_hook_idx();
     mem::drop(fiber);
