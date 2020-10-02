@@ -5,10 +5,6 @@ use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIO
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
-pub enum Hook {
-    State(JsValue),
-}
-
 pub struct Fiber {
     _type: String,
     props: Option<Box<ElementProps>>,
@@ -25,7 +21,7 @@ pub struct Fiber {
     component_function_props: Option<Rc<JsValue>>,
 
     // Hooks
-    hooks: Option<Vec<Rc<RefCell<Hook>>>>,
+    hooks: Option<Vec<Rc<RefCell<JsValue>>>>,
     hook_idx: u32,
 }
 
@@ -64,10 +60,6 @@ impl Fiber {
         &self._type == TEXT_ELEMENT
     }
 
-    pub fn is_root_fiber(&self) -> bool {
-        &self._type == FIBER_ROOT
-    }
-
     pub fn dom_node(&self) -> Option<&Rc<RefCell<Node>>> {
         self.dom_node.as_ref()
     }
@@ -78,10 +70,6 @@ impl Fiber {
 
     pub fn child(&self) -> &Option<FiberCell> {
         &self.child
-    }
-
-    pub fn child_mut(&mut self) -> &mut Option<FiberCell> {
-        &mut self.child
     }
 
     pub fn set_child(&mut self, child: FiberCell) {
@@ -160,13 +148,13 @@ impl Fiber {
         self.component_function_props = props;
     }
 
-    pub fn add_hook(&mut self, hook: Rc<RefCell<Hook>>) {
+    pub fn add_hook(&mut self, hook: Rc<RefCell<JsValue>>) {
         if let Some(hooks) = &mut self.hooks {
             hooks.push(hook);
         }
     }
 
-    pub fn get_hook_at(&self, pos: usize) -> Option<Rc<RefCell<Hook>>> {
+    pub fn get_hook_at(&self, pos: usize) -> Option<Rc<RefCell<JsValue>>> {
         self.hooks.as_ref().map_or(None, |hooks| {
             hooks.get(pos).map_or(None, |hook| {
                 Some(Rc::clone(hook))
@@ -182,11 +170,7 @@ impl Fiber {
         self.hook_idx += 1;
     }
 
-    pub fn reset_hook_idx(&mut self) {
-        self.hook_idx = 0;
-    }
-
-    pub fn set_hooks(&mut self, hooks: Option<Vec<Rc<RefCell<Hook>>>>) {
+    pub fn set_hooks(&mut self, hooks: Option<Vec<Rc<RefCell<JsValue>>>>) {
         self.hooks = hooks;
     }
 }

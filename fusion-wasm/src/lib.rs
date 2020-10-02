@@ -8,7 +8,7 @@ mod element;
 mod fiber;
 mod constants;
 use element::{Element, ElementProps, Node};
-use fiber::{Fiber, FiberCell, FiberEffect, Hook, FiberParentIterator};
+use fiber::{Fiber, FiberCell, FiberEffect, FiberParentIterator};
 use constants::{TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 #[wasm_bindgen]
@@ -533,13 +533,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
         let hook = alternate.get_hook_at(fiber.hook_idx() as usize);
 
         hook.map_or(None, |hook| {
-            let hook = hook.borrow();
-
-            if let Hook::State(old_state) = &*hook {
-                Some(old_state.clone())
-            } else {
-                None
-            }
+            Some(hook.borrow().clone())
         })
     });
 
@@ -549,12 +543,12 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
         initial_value
     };
 
-    let new_hook = Rc::new(RefCell::new(Hook::State(current_state.clone())));
+    let new_hook = Rc::new(RefCell::new(current_state.clone()));
 
     fiber.add_hook(Rc::clone(&new_hook));
 
     let set_state = Closure::once_into_js(Box::new(move |new_state: JsValue| {
-        *new_hook.borrow_mut() = Hook::State(new_state);
+        *new_hook.borrow_mut() = new_state;
         let mut context = Context::from_ptr(context_ptr);
 
         let current_root = context.current_root.as_ref();
