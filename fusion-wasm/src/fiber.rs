@@ -5,6 +5,10 @@ use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIO
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
+pub enum Hook {
+    State(JsValue),
+}
+
 pub struct Fiber {
     _type: String,
     props: Option<Box<ElementProps>>,
@@ -16,8 +20,13 @@ pub struct Fiber {
     child: Option<FiberCell>,
     effect_tag: Option<FiberEffect>,
 
-    component_function: Option<js_sys::Function>,
-    component_function_props: Option<JsValue>,
+    // Functional
+    component_function: Option<Rc<js_sys::Function>>,
+    component_function_props: Option<Rc<JsValue>>,
+
+    // Hooks
+    hooks: Option<Vec<Rc<RefCell<Hook>>>>,
+    hook_idx: u32,
 }
 
 impl Fiber {
@@ -34,6 +43,8 @@ impl Fiber {
             effect_tag: None,
             component_function: None,
             component_function_props: None,
+            hooks: None,
+            hook_idx: 0u32,
         }
     }
 
@@ -133,20 +144,50 @@ impl Fiber {
         }
     }
 
-    pub fn component_function(&self) -> Option<&js_sys::Function> {
+    pub fn component_function(&self) -> Option<&Rc<js_sys::Function>> {
         self.component_function.as_ref()
     }
 
-    pub fn set_component_function(&mut self, func: Option<js_sys::Function>) {
+    pub fn set_component_function(&mut self, func: Option<Rc<js_sys::Function>>) {
         self.component_function = func;
     }
 
-    pub fn component_function_props(&self) -> Option<&JsValue> {
+    pub fn component_function_props(&self) -> Option<&Rc<JsValue>> {
         self.component_function_props.as_ref()
     }
 
-    pub fn set_component_function_props(&mut self, props: Option<JsValue>) {
+    pub fn set_component_function_props(&mut self, props: Option<Rc<JsValue>>) {
         self.component_function_props = props;
+    }
+
+    pub fn add_hook(&mut self, hook: Rc<RefCell<Hook>>) {
+        if let Some(hooks) = &mut self.hooks {
+            hooks.push(hook);
+        }
+    }
+
+    pub fn get_hook_at(&self, pos: usize) -> Option<Rc<RefCell<Hook>>> {
+        self.hooks.as_ref().map_or(None, |hooks| {
+            hooks.get(pos).map_or(None, |hook| {
+                Some(Rc::clone(hook))
+            })
+        })
+    }
+
+    pub fn hook_idx(&self) -> u32 {
+        self.hook_idx
+    }
+
+    pub fn incr_hook_idx(&mut self) {
+        self.hook_idx += 1;
+    }
+
+    pub fn reset_hook_idx(&mut self) {
+        self.hook_idx = 0;
+    }
+
+    pub fn set_hooks(&mut self, hooks: Option<Vec<Rc<RefCell<Hook>>>>) {
+        self.hooks = hooks;
     }
 }
 

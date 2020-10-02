@@ -6,6 +6,7 @@ import {
   get_context,
   work_loop,
   render as _render,
+  use_state as _use_state
 } from "../pkg/fusion_wasm.js";
 
 let context = get_context();
@@ -13,6 +14,12 @@ let context = get_context();
 function render(element, parentDom) {
   context = _render(context, element, parentDom);
   window.requestIdleCallback(workLoop);
+}
+
+function useState(initialValue) {
+  let result = _use_state(context, initialValue);
+
+  return result;
 }
 
 function workLoop(deadline) {
@@ -46,5 +53,6 @@ function createElement(type, props = {}, ...rawChildren) {
 
 export default {
   createElement,
-  render
+  render,
+  useState,
 };
