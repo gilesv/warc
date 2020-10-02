@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use web_sys::{Element as HTMLElement, Text as HTMLText};
 use super::{TEXT_ELEMENT, FIBER_FUNCTIONAL};
@@ -9,8 +10,8 @@ pub enum Node {
 
 pub struct Element {
     element_type: String,
-    component_function: Option<js_sys::Function>,
-    component_function_props: Option<JsValue>,
+    component_function: Option<Rc<js_sys::Function>>,
+    component_function_props: Option<Rc<JsValue>>,
     props: Option<Box<ElementProps>>,
     children: Option<Vec<Box<Element>>>,
 }
@@ -18,8 +19,8 @@ pub struct Element {
 impl Element {
     pub fn new(
         element_type: String,
-        component_function: Option<js_sys::Function>,
-        component_function_props: Option<JsValue>,
+        component_function: Option<Rc<js_sys::Function>>,
+        component_function_props: Option<Rc<JsValue>>,
         props: Option<Box<ElementProps>>,
         children: Option<Vec<Box<Element>>>,
     ) -> Element {
@@ -56,12 +57,12 @@ impl Element {
         &mut self.children
     }
 
-    pub fn component_function_mut(&mut self) -> &mut Option<js_sys::Function> {
-        &mut self.component_function
+    pub fn component_function(&self) -> Option<&Rc<js_sys::Function>> {
+        self.component_function.as_ref()
     }
 
-    pub fn component_function_props_mut(&mut self) -> &mut Option<JsValue> {
-        &mut self.component_function_props
+    pub fn component_function_props(&self) -> Option<&Rc<JsValue>> {
+        self.component_function_props.as_ref()
     }
 
     pub fn from_ptr(ptr: *mut Element) -> Box<Element> {
@@ -152,8 +153,8 @@ pub fn create_text_element(value: String) -> *mut Element {
 pub fn create_functional_component(func: js_sys::Function, props: JsValue) -> *mut Element {
     let element = Element::new(
         String::from(FIBER_FUNCTIONAL),
-        Some(func),
-        Some(props),
+        Some(Rc::new(func)),
+        Some(Rc::new(props)),
         None,
         None
     );

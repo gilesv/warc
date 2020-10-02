@@ -8,7 +8,7 @@ mod element;
 mod fiber;
 mod constants;
 use element::{Element, ElementProps, Node};
-use fiber::{Fiber, FiberCell, FiberEffect, FiberParentIterator};
+use fiber::{Fiber, FiberCell, FiberEffect, Hook, FiberParentIterator};
 use constants::{TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 #[wasm_bindgen]
@@ -33,9 +33,8 @@ pub struct Context {
     wip_root: Option<FiberCell>,
     current_root: Option<FiberCell>,
     next_unit_of_work: Option<FiberCell>,
-    wip_functional_fiber: Option<Fiber>,
+    wip_functional_fiber: Option<FiberCell>,
     effects: Vec<FiberCell>,
-    hook_index: usize,
     document: Document
 }
 
@@ -50,7 +49,6 @@ impl Context {
             next_unit_of_work: None,
             wip_functional_fiber: None,
             effects: Vec::new(),
-            hook_index: 0,
             document
         }
     }
@@ -85,18 +83,22 @@ impl Context {
     }
 
     fn perform_unit_of_work(&mut self, wip_fiber: FiberCell) -> Option<FiberCell> {
-        let mut fiber = wip_fiber.borrow_mut();
+        let is_functional_tree = wip_fiber.borrow().is_functional_tree();
 
-        if fiber.is_functional_tree() {
-            let component_func = &fiber.component_function().unwrap();
-            let func_props = fiber.component_function_props().unwrap();
+        if is_functional_tree {
+            let fiber = wip_fiber.borrow();
 
-            let child: Option<Box<Element>> = component_func.call1(&JsValue::null(), func_props)
-                .unwrap()
-                .as_f64()
-                .map(|child_ptr| {
-                    Element::from_ptr(child_ptr as u32 as *mut Element)
-                });
+            let func = Rc::clone(&fiber.component_function().unwrap());
+            let props = Rc::clone(&fiber.component_function_props().unwrap());
+
+            // Drop the borrow so it can be borrowed from 'use_state'
+            mem::drop(fiber);
+
+            self.wip_functional_fiber = Some(Rc::clone(&wip_fiber));
+            let child = self.execute_function_component(func, props);
+            self.wip_functional_fiber = None;
+
+            let mut fiber = wip_fiber.borrow_mut();
 
             if let Some(child) = child {
                 let children_vec = vec![child];
@@ -105,7 +107,8 @@ impl Context {
 
             self.reconcile_children(&wip_fiber, &mut fiber);
         } else {
-            // console_log!("performing work for {}", fiber.element_type());
+            let mut fiber = wip_fiber.borrow_mut();
+
             if fiber.dom_node().is_none() {
                 let dom_node = self.create_dom_node(&fiber);
 
@@ -114,6 +117,8 @@ impl Context {
 
             self.reconcile_children(&wip_fiber, &mut fiber);
         }
+
+        let fiber = wip_fiber.borrow_mut();
 
         // Add to effect list
         if fiber.effect_tag().is_some() {
@@ -145,6 +150,17 @@ impl Context {
         }
 
         return None;
+    }
+
+    fn execute_function_component(
+        &self,
+        func: Rc<js_sys::Function>,
+        props: Rc<JsValue>
+    ) -> Option<Box<Element>> {
+        func.call1(&JsValue::null(), &props)
+            .unwrap()
+            .as_f64()
+            .map(|child_ptr| Element::from_ptr(child_ptr as u32 as *mut Element))
     }
 
     fn create_dom_node(&self, fiber: &Fiber) -> Node {
@@ -303,8 +319,12 @@ impl Context {
             };
 
             if child_fiber.is_functional_tree() {
-                child_fiber.set_component_function(child_element.component_function_mut().take());
-                child_fiber.set_component_function_props(child_element.component_function_props_mut().take()); 
+                let func = child_element.component_function().unwrap();
+                let props = child_element.component_function_props().unwrap();
+
+                child_fiber.set_component_function(Some(Rc::clone(&func)));
+                child_fiber.set_component_function_props(Some(Rc::clone(&props)));
+                child_fiber.set_hooks(Some(vec![]));
             }
 
             if let Some(old_child_fiber) = old_child_fiber.as_ref() {
@@ -519,4 +539,74 @@ pub fn work_loop(context_ptr: *mut Context, did_timeout: bool) -> *mut Context {
     context.work_loop(did_timeout).unwrap();
 
     Box::into_raw(context)
+}
+
+#[wasm_bindgen]
+pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsValue]> {
+    let context = Context::from_ptr(context_ptr.clone());
+    let wip_fiber = context.wip_functional_fiber.as_ref().unwrap();
+    let mut fiber = wip_fiber.borrow_mut();
+
+    let old_state = fiber.alternate().map_or(None, |alternate| {
+        let alternate = alternate.borrow();
+        let hook = alternate.get_hook_at(fiber.hook_idx() as usize);
+
+        hook.map_or(None, |hook| {
+            let hook = hook.borrow();
+
+            if let Hook::State(old_state) = &*hook {
+                Some(old_state.clone())
+            } else {
+                None
+            }
+        })
+    });
+
+    let current_state = if old_state.is_some() {
+        old_state.unwrap()
+    } else {
+        initial_value
+    };
+
+    let new_hook = Rc::new(RefCell::new(Hook::State(current_state.clone())));
+
+    fiber.add_hook(Rc::clone(&new_hook));
+
+    let set_state = Closure::wrap(Box::new(move |new_state: JsValue| {
+        *new_hook.borrow_mut() = Hook::State(new_state);
+        let mut context = Context::from_ptr(context_ptr);
+
+        let current_root = context.current_root.as_ref();
+        let mut root = Fiber::new_root();
+        
+        current_root.map(|current_root| {
+            root.set_alternate(Rc::clone(current_root));
+
+            let current_root = current_root.borrow();
+
+            if let Some(children) = current_root.element_children().as_ref() {
+                root.set_element_children(Some(Rc::clone(&children)));
+            }
+
+            // Store the container HTML element
+            if let Some(dom_node) = current_root.dom_node().as_ref() {
+                root.set_dom_node(Rc::clone(dom_node));
+            }
+        });
+
+        // Make it the Work in Progress Root and the Next Unit of Work
+        let root = Rc::new(RefCell::new(Box::new(root)));
+        context.wip_root = Some(Rc::clone(&root));
+        context.next_unit_of_work = Some(Rc::clone(&root));
+
+        Box::into_raw(context);
+    }) as Box<dyn FnMut(JsValue)>).into_js_value();
+
+    fiber.incr_hook_idx();
+    mem::drop(fiber);
+    mem::drop(wip_fiber);
+
+    Box::into_raw(context);
+
+    vec![current_state, set_state].into_boxed_slice()
 }

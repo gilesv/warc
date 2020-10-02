@@ -17,12 +17,20 @@ import("fusion-wasm").then(({ default: Fusion }: any) => {
 
   function App(props: any) {
     const notes = props.notes;
-    const onClick = () => {
-      alert(props.status);
+    const [a, setA] = Fusion.useState({ a: "a "});
+    const [b, setB] = Fusion.useState("B");
+    const onClickA = () => {
+      setA({ a: a.a + "H" });
+    };
+    const onClickB = () => {
+      setB(b + "Z");
     };
     return (
       <main>
-        <h2 onClick={onClick}>Melhores séries</h2>
+        <h2>Melhores séries</h2>
+        <span>A: {a.a} <button onClick={onClickA}>A</button></span>
+        <br></br>
+        <span>B: {b} <button onClick={onClickB}>B</button></span>
         {
           notes.map((name: string) =>{
             return <Note name={name} />
