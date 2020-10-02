@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL, console_log, log};
+use super::{Element, ElementProps, Node, TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 pub type FiberCell = Rc<RefCell<Box<Fiber>>>;
 
