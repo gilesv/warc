@@ -6,14 +6,14 @@ const dist = path.resolve(__dirname, "dist");
 module.exports = {
   mode: "development",
   entry: {
-    index: "./src/index.tsx"
+    index: "./src/app.js"
   },
   module: {
     rules: [
       {
-        test: /\.tsx?$/,
-        use: 'ts-loader',
-        exclude: /node_modules/,
+        test: /\.js$/,
+        use: 'babel-loader',
+        exclude: '/node_modules',
       },
     ],
   },
