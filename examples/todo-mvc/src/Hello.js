@@ -1,4 +1,4 @@
-import * as Fusion from "fusion-wasm";
+import Fusion from "fusion-wasm";
 
 export default function Hello({ name }) {
   let [clickNumber, setClickNumber] = Fusion.useState(0);
