@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use web_sys::{Element as HTMLElement, Text as HTMLText, Window, Document};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,6 +12,22 @@ use element::{Element, ElementProps, Node};
 use fiber::{Fiber, FiberCell, FiberEffect, FiberParentIterator};
 use constants::{TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace=console)]
+    fn log(s: &str);
+}
+// Next let's define a macro that's like `println!`, only it works for
+// `console.log`. Note that `println!` doesn't actually work on the wasm target
+// because the standard library currently just eats all output. To get
+// `println!`-like behavior in your app you'll likely want a macro like this.
+
+#[macro_export]
+macro_rules! console_log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (unsafe { log(&format_args!($($t)*).to_string()); })
+}
 #[wasm_bindgen]
 pub struct Context {
     wip_root: Option<FiberCell>,
@@ -167,6 +184,20 @@ impl Context {
 
         let prev_on_click = prev_props.and_then(|p| p.on_click());
         let next_on_click = next_props.on_click();
+        let prev_on_change = prev_props.and_then(|p| p.on_change());
+        let next_on_change = next_props.on_change();
+        let prev_on_blur = prev_props.and_then(|p| p.on_blur());
+        let next_on_blur = next_props.on_blur();
+        let prev_on_keydown = prev_props.and_then(|p| p.on_keydown());
+        let next_on_keydown = next_props.on_keydown();
+        let prev_input_type = prev_props.and_then(|p| p.input_type());
+        let next_input_type = next_props.input_type();
+        let prev_input_value = prev_props.and_then(|p| p.input_value());
+        let next_input_value = next_props.input_value();
+        let prev_input_placeholder = prev_props.and_then(|p| p.input_placeholder());
+        let next_input_placeholder = next_props.input_placeholder();
+        let prev_input_checked = prev_props.and_then(|p| p.input_checked());
+        let next_input_checked = next_props.input_checked();
 
         // Class name
         match (prev_class_name, next_class_name) {
@@ -181,17 +212,94 @@ impl Context {
             (_, _) => {}
         }
 
-        // On Click
-        match (prev_on_click, next_on_click) {
+        // Input type
+        match (prev_input_type, next_input_type) {
+            (None, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_type(next);
+            },
+            (_, _) => {}
+        }
+
+        // Input value
+        match (prev_input_value, next_input_value) {
+            (_, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_value(next);
+            },
+            (_, _) => {}
+        }
+
+        // Input checked
+        match (prev_input_checked, next_input_checked) {
+            (_, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_checked(next);
+            },
+            (_, _) => {}
+        }
+
+        // Input placeholder
+        match (prev_input_placeholder, next_input_placeholder) {
+            (Some(prev), Some(next)) => {
+                if *prev != *next {
+                    dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                        .set_placeholder(next);
+                }
+            },
+            (None, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_placeholder(next);
+            }
+            (_, _) => {}
+        }
+
+        self.update_listener(
+            "click",
+            &prev_on_click,
+            &next_on_click,
+            &dom_node
+        );
+
+        self.update_listener(
+            "change",
+            &prev_on_change,
+            &next_on_change,
+            &dom_node
+        );
+
+        self.update_listener(
+            "blur",
+            &prev_on_blur,
+            &next_on_blur,
+            &dom_node
+        );
+
+        self.update_listener(
+            "keydown",
+            &prev_on_keydown,
+            &next_on_keydown,
+            &dom_node
+        );
+    }
+
+    fn update_listener(
+        &self,
+        event_type: &str,
+        prev_listener: &Option<&js_sys::Function>,
+        next_listener: &Option<&js_sys::Function>,
+        dom_node: &HTMLElement,
+    ) {
+        match (prev_listener, next_listener) {
             (None, Some(callback)) => {
-                dom_node.add_event_listener_with_callback("click", callback).unwrap();
+                dom_node.add_event_listener_with_callback(event_type, callback).unwrap();
             },
             (Some(callback), None) => {
-                dom_node.remove_event_listener_with_callback("click", callback).unwrap();
+                dom_node.remove_event_listener_with_callback(event_type, callback).unwrap();
             },
             (Some(prev_callback), Some(next_callback)) => {
-                dom_node.remove_event_listener_with_callback("click", prev_callback).unwrap();
-                dom_node.add_event_listener_with_callback("click", next_callback).unwrap();
+                dom_node.remove_event_listener_with_callback(event_type, prev_callback).unwrap();
+                dom_node.add_event_listener_with_callback(event_type, next_callback).unwrap();
             },
             (_, _) => {}
         }
@@ -479,6 +587,7 @@ impl Context {
 
 #[wasm_bindgen]
 pub fn get_context() -> *mut Context {
+    console_error_panic_hook::set_once();
     let context = Box::new(Context::new());
     Box::into_raw(context)
 }
@@ -547,7 +656,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
 
     fiber.add_hook(Rc::clone(&new_hook));
 
-    let set_state = Closure::once_into_js(Box::new(move |new_state: JsValue| {
+    let set_state = Closure::wrap(Box::new(move |new_state: JsValue| {
         *new_hook.borrow_mut() = new_state;
         let mut context = Context::from_ptr(context_ptr);
 
@@ -575,7 +684,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
         context.next_unit_of_work = Some(Rc::clone(&root));
 
         Box::into_raw(context);
-    }) as Box<dyn FnMut(JsValue)>);
+    }) as Box<dyn FnMut(JsValue)>).into_js_value();
 
     fiber.incr_hook_idx();
     mem::drop(fiber);
