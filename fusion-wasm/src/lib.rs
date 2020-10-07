@@ -324,99 +324,101 @@ impl Context {
 
     fn reconcile_children(&mut self, wip_unit: &FiberCell, fiber: &mut Fiber) {
         let children = fiber.element_children().as_ref();
-        let children_len = children.map_or(0, |children| { children.borrow().len() });
+        let children_len = children.map_or(0, |children| children.borrow().len());
 
         let mut i = 0;
         let mut previous_sibling: Option<FiberCell> = None;
         let mut first_child_fiber: Option<FiberCell> = None;
 
-        let mut old_child_fiber = if fiber.alternate().is_some() {
-            let alternate = fiber.alternate().as_ref().unwrap().borrow();
-
-            if let Some(child) = &alternate.child() {
-                Some(Rc::clone(child))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let mut old_child_fiber = fiber.alternate().map_or(None, |alternate| {
+            alternate.borrow()
+                .child()
+                .as_ref()
+                .map_or(None, |child| {
+                    Some(Rc::clone(child))
+                })
+        });
 
         while i < children_len || old_child_fiber.as_ref().is_some() {
-            let child_element = &mut children.unwrap().borrow_mut()[i];
+            let mut children = children.unwrap().borrow_mut();
+            let child_element = children.get_mut(i);
 
             let has_same_type = old_child_fiber.as_ref().map_or(false, |old_child| {
-                let old_child = old_child.borrow();
-                let old_child_type = old_child.element_type();
-                let new_child_type = child_element.element_type();
-
-                *old_child_type == *new_child_type
+                child_element.as_ref().map_or(false, |child| {
+                    *old_child.borrow().element_type() == *child.element_type()
+                })
             });
 
-            // Generate a new Fiber for the updated node
-            let mut child_fiber = if has_same_type {
-                let alternate_child = old_child_fiber.as_ref().unwrap();
-                let mut child_fiber = Fiber::new(&alternate_child.borrow().element_type());
+            let child_fiber = child_element.map_or(None, |child_element| {
+                // Generate a new Fiber for the updated node
+                let mut child_fiber = if has_same_type {
+                    let alternate_child = old_child_fiber.as_ref().unwrap();
+                    let mut child_fiber = Fiber::new(&alternate_child.borrow().element_type());
 
-                child_fiber.set_props(child_element.props_mut().take());
+                    child_fiber.set_props(child_element.props_mut().take());
 
-                let element_children = child_element.children_mut().take().map(|children| {
-                    Rc::new(RefCell::new(children))
-                });
+                    let element_children = child_element.children_mut().take().map(|children| {
+                        Rc::new(RefCell::new(children))
+                    });
 
-                child_fiber.set_element_children(element_children);
+                    child_fiber.set_element_children(element_children);
 
-                // relate to alternate
-                child_fiber.set_alternate(Rc::clone(&alternate_child));
+                    // relate to alternate
+                    child_fiber.set_alternate(Rc::clone(&alternate_child));
 
-                // set existing dom node
-                if let Some(old_child_node) = alternate_child.borrow().dom_node() {
-                    child_fiber.set_dom_node(Rc::clone(old_child_node));
-                }
+                    // set existing dom node
+                    if let Some(old_child_node) = alternate_child.borrow().dom_node() {
+                        child_fiber.set_dom_node(Rc::clone(old_child_node));
+                    }
 
-                // relate to parent (current fiber)
-                child_fiber.set_parent(Rc::clone(wip_unit));
+                    // relate to parent (current fiber)
+                    child_fiber.set_parent(Rc::clone(wip_unit));
 
-                // effect
-                if !child_fiber.is_functional_tree() {
-                    if let Some(old_props) = alternate_child.borrow().props() {
-                        if child_fiber.has_props_changed(old_props) {
-                            child_fiber.set_effect_tag(FiberEffect::Update);
-                            // console_log!("added UPDATE effect for {}", &child_fiber.element_type());
+                    // effect
+                    if !child_fiber.is_functional_tree() {
+                        if let Some(old_props) = alternate_child.borrow().props() {
+                            if child_fiber.has_props_changed(old_props) {
+                                child_fiber.set_effect_tag(FiberEffect::Update);
+                                // console_log!("added UPDATE effect for {}", &child_fiber.element_type());
+                            }
                         }
                     }
-                }
 
-                child_fiber
-            } else {
-                let mut child_fiber = Fiber::new(&child_element.element_type());
+                    Some(child_fiber)
+                } else {
+                    let mut child_fiber = Fiber::new(&child_element.element_type());
 
-                child_fiber.set_props(child_element.props_mut().take());
-                let element_children = child_element.children_mut().take().map(|children| {
-                    Rc::new(RefCell::new(children))
+                    child_fiber.set_props(child_element.props_mut().take());
+                    let element_children = child_element.children_mut().take().map(|children| {
+                        Rc::new(RefCell::new(children))
+                    });
+                    child_fiber.set_element_children(element_children);
+
+                    // relate to parent (current fiber)
+                    child_fiber.set_parent(Rc::clone(wip_unit));
+
+                    // effect
+                    if !child_fiber.is_functional_tree() {
+                        child_fiber.set_effect_tag(FiberEffect::Placement);
+                        // console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
+                    }
+
+                    Some(child_fiber)
+                };
+
+                child_fiber.as_mut().map(|child_fiber| {
+                    if child_fiber.is_functional_tree() {
+                        let func = child_element.component_function().unwrap();
+                        let props = child_element.component_function_props().unwrap();
+
+                        child_fiber.set_component_function(Some(Rc::clone(&func)));
+                        child_fiber.set_component_function_props(Some(Rc::clone(&props)));
+                        child_fiber.set_hooks(Some(vec![]));
+                    }
                 });
-                child_fiber.set_element_children(element_children);
-
-                // relate to parent (current fiber)
-                child_fiber.set_parent(Rc::clone(wip_unit));
-
-                // effect
-                if !child_fiber.is_functional_tree() {
-                    child_fiber.set_effect_tag(FiberEffect::Placement);
-                    // console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
-                }
 
                 child_fiber
-            };
-
-            if child_fiber.is_functional_tree() {
-                let func = child_element.component_function().unwrap();
-                let props = child_element.component_function_props().unwrap();
-
-                child_fiber.set_component_function(Some(Rc::clone(&func)));
-                child_fiber.set_component_function_props(Some(Rc::clone(&props)));
-                child_fiber.set_hooks(Some(vec![]));
-            }
+            });
 
             if let Some(old_child_fiber) = old_child_fiber.as_ref() {
                 if !has_same_type {
@@ -439,18 +441,21 @@ impl Context {
                 old_child_fiber = old_child_sibling;
             }
 
-            let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
-
-            if i == 0 {
-                first_child_fiber = Some(Rc::clone(&child_fiber));
-            } else {
-                if let Some(previous_sibling) = previous_sibling {
-                    previous_sibling.borrow_mut().set_sibling(Rc::clone(&child_fiber));
-                }
-            }
             
-            previous_sibling = Some(Rc::clone(&child_fiber));
-            i += 1;
+            if let Some(child_fiber) = child_fiber {
+                let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
+
+                if i == 0 {
+                    first_child_fiber = Some(Rc::clone(&child_fiber));
+                } else {
+                    if let Some(previous_sibling) = previous_sibling {
+                        previous_sibling.borrow_mut().set_sibling(Rc::clone(&child_fiber));
+                    }
+                }
+                
+                previous_sibling = Some(Rc::clone(&child_fiber));
+                i += 1;
+            }
 
         }
 
