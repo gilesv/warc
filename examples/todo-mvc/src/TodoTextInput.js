@@ -6,30 +6,35 @@ export default function TodoTextInput({ value, onSave, newTodo, editing, placeho
   let [text, setText] = Fusion.useState(value || "");
 
   let handleSubmit = (e) => {
-    let value = e.target.value.trim();
+    let newValue = e.target.value.trim();
 
     if (e.which === ENTER_KEY) {
-      onSave(value);
+      onSave(newValue);
 
       if (newTodo) {
         setText("");
+      } else {
+        setText(newValue);
       }
     }
   };
 
   let handleBlur = (e) => {
-    if (!newTodo) {
-      onSave(e.target.value);
+    let newValue = e.target.value.trim();
+    onSave(newValue);
+
+    if (newTodo) {
+      setText("");
+    } else {
+      setText(newValue);
     }
   };
 
-  let className = `${editing ? "editing " : ""}${newTodo ? "new-todo" : ""}`
-
   return (
     <input
-      className={className}
+      className={`${newTodo ? "new-todo" : "edit"}`}
       type="text"
-      placeholder="What needs to be done?"
+      placeholder={placeholder}
       autoFocus={true}
       value={text}
       onBlur={handleBlur}

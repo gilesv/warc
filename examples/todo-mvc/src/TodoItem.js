@@ -15,18 +15,9 @@ export default function TodoItem({ todo, toggleTodo, editTodo, deleteTodo }) {
     setEditing(false);
   };
 
-  let element;
 
-  if (editing) {
-    element = (
-      <TodoTextInput
-        text={todo.text}
-        editing={editing}
-        onSave={text => handleSave(todo.id, text)}
-      />
-    );
-  } else {
-    element = (
+  return (
+    <li className={`${todo.completed ? "completed ":""}${editing ? "editing" : ""}`} >
       <div className="view">
         <input
           className="toggle"
@@ -37,14 +28,13 @@ export default function TodoItem({ todo, toggleTodo, editTodo, deleteTodo }) {
         <label onClick={handleDoubleClick}>{todo.text}</label>
         <button className="destroy" onClick={() => deleteTodo(todo.id)} />
       </div>
-    );
-  }
-  
-  let className = `${todo.completed ? "completed ":""}${editing ? "editing" : ""}`
 
-  return (
-    <li className={className} >
-      {element}
+      <TodoTextInput
+        value={todo.text}
+        editing={editing}
+        onSave={text => handleSave(todo.id, text)}
+        placeholder=""
+      />
     </li>
   );
 }

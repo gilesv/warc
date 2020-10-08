@@ -14,6 +14,7 @@ export default function Header({ addTodo }) {
       <TodoTextInput
         newTodo={true}
         onSave={onSave}
+        placeholder={"What needs to be done?"}
       />
     </header>
   );
