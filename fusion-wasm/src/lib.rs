@@ -505,7 +505,22 @@ impl Context {
             },
             Some(FiberEffect::Deletion) => {
                 // console_log!("executing DELETION for {}", fiber.borrow().element_type());
-                self.commit_node_deletion(&fiber)?;
+
+                // This can break if we have a functional component that returns another functional component
+                // without an element in between. An iterator through all children of a fiber to find
+                // the next DOM element would be fine but for my current case simply getting the first child is quicker.
+                if fiber.borrow().is_functional_tree() {
+                    let fiber_borrowed = fiber.borrow();
+
+                    if let Some(child) = fiber_borrowed.child().as_ref() {
+                        self.commit_node_deletion(&child)?;
+                    } else {
+                        self.commit_node_deletion(&fiber)?;
+                    }
+                } else {
+                    self.commit_node_deletion(&fiber)?;
+                }
+
             },
             None => {}
         }
