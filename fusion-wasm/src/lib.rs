@@ -13,22 +13,6 @@ use fiber::{Fiber, FiberCell, FiberEffect, FiberParentIterator};
 use constants::{TEXT_ELEMENT, FIBER_ROOT, FIBER_FUNCTIONAL};
 
 #[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace=console)]
-    fn log(s: &str);
-}
-// Next let's define a macro that's like `println!`, only it works for
-// `console.log`. Note that `println!` doesn't actually work on the wasm target
-// because the standard library currently just eats all output. To get
-// `println!`-like behavior in your app you'll likely want a macro like this.
-
-#[macro_export]
-macro_rules! console_log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (unsafe { log(&format_args!($($t)*).to_string()); })
-}
-#[wasm_bindgen]
 pub struct Context {
     wip_root: Option<FiberCell>,
     current_root: Option<FiberCell>,
@@ -607,7 +591,6 @@ impl Context {
 
 #[wasm_bindgen]
 pub fn get_context() -> *mut Context {
-    console_error_panic_hook::set_once();
     let context = Box::new(Context::new());
     Box::into_raw(context)
 }
