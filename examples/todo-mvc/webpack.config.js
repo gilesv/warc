@@ -4,9 +4,9 @@ const CopyPlugin = require("copy-webpack-plugin");
 const dist = path.resolve(__dirname, "dist");
 
 module.exports = {
-  mode: "development",
+  mode: "production",
   entry: {
-    index: "./src/app.js"
+    index: "./src/index.js"
   },
   module: {
     rules: [
@@ -14,6 +14,10 @@ module.exports = {
         test: /\.js$/,
         use: 'babel-loader',
         exclude: '/node_modules',
+      },
+      {
+        test: /\.css$/i,
+        use: ['style-loader', 'css-loader'],
       },
     ],
   },

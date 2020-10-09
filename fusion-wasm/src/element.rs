@@ -75,17 +75,17 @@ pub struct ElementProps {
     class_name: Option<String>,
     node_value: Option<String>,
     on_click: Option<js_sys::Function>,
+    on_change: Option<js_sys::Function>,
+    on_blur: Option<js_sys::Function>,
+    on_keydown: Option<js_sys::Function>,
+
+    input_type: Option<String>,
+    input_value: Option<String>,
+    input_placeholder: Option<String>,
+    input_checked: Option<bool>,
 }
 
 impl ElementProps {
-    pub fn new(
-        class_name: Option<String>,
-        node_value: Option<String>,
-        on_click: Option<js_sys::Function>,
-    ) -> Self {
-        ElementProps { class_name, node_value, on_click }
-    }
-
     pub fn class_name(&self) -> Option<&String> {
         self.class_name.as_ref()
     }
@@ -98,6 +98,34 @@ impl ElementProps {
         self.on_click.as_ref()
     }
 
+    pub fn on_change(&self) -> Option<&js_sys::Function> {
+        self.on_change.as_ref()
+    }
+
+    pub fn on_blur(&self) -> Option<&js_sys::Function> {
+        self.on_blur.as_ref()
+    }
+
+    pub fn on_keydown(&self) -> Option<&js_sys::Function> {
+        self.on_keydown.as_ref()
+    }
+
+    pub fn input_type(&self) -> Option<&String> {
+        self.input_type.as_ref()
+    }
+
+    pub fn input_value(&self) -> Option<&String> {
+        self.input_value.as_ref()
+    }
+
+    pub fn input_placeholder(&self) -> Option<&String> {
+        self.input_placeholder.as_ref()
+    }
+
+    pub fn input_checked(&self) -> Option<bool> {
+        self.input_checked
+    }
+
     pub fn from_ptr(ptr: *mut ElementProps) -> Box<ElementProps> {
         unsafe { Box::from_raw(ptr) }
     }
@@ -107,7 +135,14 @@ impl PartialEq for ElementProps {
     fn eq(&self, other: &Self) -> bool {
         self.class_name == other.class_name &&
         self.node_value == other.node_value &&
-        self.on_click == other.on_click
+        self.on_click == other.on_click &&
+        self.on_change == other.on_change &&
+        self.on_blur == other.on_blur &&
+        self.on_keydown == other.on_keydown &&
+        self.input_type == other.input_type &&
+        self.input_value == other.input_value &&
+        self.input_placeholder == other.input_placeholder &&
+        self.input_checked == self.input_checked
     }
 }
 
@@ -136,7 +171,18 @@ pub fn create_element(
 
 #[wasm_bindgen]
 pub fn create_text_element(value: String) -> *mut Element {
-    let props = ElementProps::new(None, Some(value), None);
+    let props = ElementProps {
+        class_name: None,
+        node_value: Some(value),
+        on_click: None,
+        on_change: None,
+        on_blur: None,
+        on_keydown: None,
+        input_type: None,
+        input_checked: None,
+        input_placeholder: None,
+        input_value: None,
+    };
 
     let element = Element::new(
         String::from(TEXT_ELEMENT), 
@@ -166,8 +212,26 @@ pub fn create_functional_component(func: js_sys::Function, props: JsValue) -> *m
 pub fn create_props(
     class_name: Option<String>,
     node_value: Option<String>,
-    on_click: Option<js_sys::Function>
+    on_click: Option<js_sys::Function>,
+    on_change: Option<js_sys::Function>,
+    on_blur: Option<js_sys::Function>,
+    on_keydown: Option<js_sys::Function>,
+    input_type: Option<String>,
+    input_value: Option<String>,
+    input_checked: Option<bool>,
+    input_placeholder: Option<String>,
 ) -> *mut ElementProps {
-    let props = ElementProps::new(class_name, node_value, on_click);
+    let props = ElementProps {
+        class_name,
+        node_value,
+        on_click,
+        on_change,
+        on_blur,
+        on_keydown,
+        input_type,
+        input_value,
+        input_placeholder,
+        input_checked,
+    };
     Box::into_raw(Box::new(props))
 }
