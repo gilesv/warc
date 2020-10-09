@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use web_sys::{Element as HTMLElement, Text as HTMLText, Window, Document};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -167,6 +168,20 @@ impl Context {
 
         let prev_on_click = prev_props.and_then(|p| p.on_click());
         let next_on_click = next_props.on_click();
+        let prev_on_change = prev_props.and_then(|p| p.on_change());
+        let next_on_change = next_props.on_change();
+        let prev_on_blur = prev_props.and_then(|p| p.on_blur());
+        let next_on_blur = next_props.on_blur();
+        let prev_on_keydown = prev_props.and_then(|p| p.on_keydown());
+        let next_on_keydown = next_props.on_keydown();
+        let prev_input_type = prev_props.and_then(|p| p.input_type());
+        let next_input_type = next_props.input_type();
+        let prev_input_value = prev_props.and_then(|p| p.input_value());
+        let next_input_value = next_props.input_value();
+        let prev_input_placeholder = prev_props.and_then(|p| p.input_placeholder());
+        let next_input_placeholder = next_props.input_placeholder();
+        let prev_input_checked = prev_props.and_then(|p| p.input_checked());
+        let next_input_checked = next_props.input_checked();
 
         // Class name
         match (prev_class_name, next_class_name) {
@@ -181,17 +196,94 @@ impl Context {
             (_, _) => {}
         }
 
-        // On Click
-        match (prev_on_click, next_on_click) {
+        // Input type
+        match (prev_input_type, next_input_type) {
+            (None, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_type(next);
+            },
+            (_, _) => {}
+        }
+
+        // Input value
+        match (prev_input_value, next_input_value) {
+            (_, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_value(next);
+            },
+            (_, _) => {}
+        }
+
+        // Input checked
+        match (prev_input_checked, next_input_checked) {
+            (_, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_checked(next);
+            },
+            (_, _) => {}
+        }
+
+        // Input placeholder
+        match (prev_input_placeholder, next_input_placeholder) {
+            (Some(prev), Some(next)) => {
+                if *prev != *next {
+                    dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                        .set_placeholder(next);
+                }
+            },
+            (None, Some(next)) => {
+                dom_node.unchecked_ref::<web_sys::HtmlInputElement>()
+                    .set_placeholder(next);
+            }
+            (_, _) => {}
+        }
+
+        self.update_listener(
+            "click",
+            &prev_on_click,
+            &next_on_click,
+            &dom_node
+        );
+
+        self.update_listener(
+            "change",
+            &prev_on_change,
+            &next_on_change,
+            &dom_node
+        );
+
+        self.update_listener(
+            "blur",
+            &prev_on_blur,
+            &next_on_blur,
+            &dom_node
+        );
+
+        self.update_listener(
+            "keydown",
+            &prev_on_keydown,
+            &next_on_keydown,
+            &dom_node
+        );
+    }
+
+    fn update_listener(
+        &self,
+        event_type: &str,
+        prev_listener: &Option<&js_sys::Function>,
+        next_listener: &Option<&js_sys::Function>,
+        dom_node: &HTMLElement,
+    ) {
+        match (prev_listener, next_listener) {
             (None, Some(callback)) => {
-                dom_node.add_event_listener_with_callback("click", callback).unwrap();
+                dom_node.add_event_listener_with_callback(event_type, callback).unwrap();
             },
             (Some(callback), None) => {
-                dom_node.remove_event_listener_with_callback("click", callback).unwrap();
+                dom_node.remove_event_listener_with_callback(event_type, callback).unwrap();
             },
             (Some(prev_callback), Some(next_callback)) => {
-                dom_node.remove_event_listener_with_callback("click", prev_callback).unwrap();
-                dom_node.add_event_listener_with_callback("click", next_callback).unwrap();
+                dom_node.remove_event_listener_with_callback(event_type, prev_callback).unwrap();
+                dom_node.add_event_listener_with_callback(event_type, next_callback).unwrap();
             },
             (_, _) => {}
         }
@@ -216,99 +308,101 @@ impl Context {
 
     fn reconcile_children(&mut self, wip_unit: &FiberCell, fiber: &mut Fiber) {
         let children = fiber.element_children().as_ref();
-        let children_len = children.map_or(0, |children| { children.borrow().len() });
+        let children_len = children.map_or(0, |children| children.borrow().len());
 
         let mut i = 0;
         let mut previous_sibling: Option<FiberCell> = None;
         let mut first_child_fiber: Option<FiberCell> = None;
 
-        let mut old_child_fiber = if fiber.alternate().is_some() {
-            let alternate = fiber.alternate().as_ref().unwrap().borrow();
-
-            if let Some(child) = &alternate.child() {
-                Some(Rc::clone(child))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let mut old_child_fiber = fiber.alternate().map_or(None, |alternate| {
+            alternate.borrow()
+                .child()
+                .as_ref()
+                .map_or(None, |child| {
+                    Some(Rc::clone(child))
+                })
+        });
 
         while i < children_len || old_child_fiber.as_ref().is_some() {
-            let child_element = &mut children.unwrap().borrow_mut()[i];
+            let mut children = children.unwrap().borrow_mut();
+            let child_element = children.get_mut(i);
 
             let has_same_type = old_child_fiber.as_ref().map_or(false, |old_child| {
-                let old_child = old_child.borrow();
-                let old_child_type = old_child.element_type();
-                let new_child_type = child_element.element_type();
-
-                *old_child_type == *new_child_type
+                child_element.as_ref().map_or(false, |child| {
+                    *old_child.borrow().element_type() == *child.element_type()
+                })
             });
 
-            // Generate a new Fiber for the updated node
-            let mut child_fiber = if has_same_type {
-                let alternate_child = old_child_fiber.as_ref().unwrap();
-                let mut child_fiber = Fiber::new(&alternate_child.borrow().element_type());
+            let child_fiber = child_element.map_or(None, |child_element| {
+                // Generate a new Fiber for the updated node
+                let mut child_fiber = if has_same_type {
+                    let alternate_child = old_child_fiber.as_ref().unwrap();
+                    let mut child_fiber = Fiber::new(&alternate_child.borrow().element_type());
 
-                child_fiber.set_props(child_element.props_mut().take());
+                    child_fiber.set_props(child_element.props_mut().take());
 
-                let element_children = child_element.children_mut().take().map(|children| {
-                    Rc::new(RefCell::new(children))
-                });
+                    let element_children = child_element.children_mut().take().map(|children| {
+                        Rc::new(RefCell::new(children))
+                    });
 
-                child_fiber.set_element_children(element_children);
+                    child_fiber.set_element_children(element_children);
 
-                // relate to alternate
-                child_fiber.set_alternate(Rc::clone(&alternate_child));
+                    // relate to alternate
+                    child_fiber.set_alternate(Rc::clone(&alternate_child));
 
-                // set existing dom node
-                if let Some(old_child_node) = alternate_child.borrow().dom_node() {
-                    child_fiber.set_dom_node(Rc::clone(old_child_node));
-                }
+                    // set existing dom node
+                    if let Some(old_child_node) = alternate_child.borrow().dom_node() {
+                        child_fiber.set_dom_node(Rc::clone(old_child_node));
+                    }
 
-                // relate to parent (current fiber)
-                child_fiber.set_parent(Rc::clone(wip_unit));
+                    // relate to parent (current fiber)
+                    child_fiber.set_parent(Rc::clone(wip_unit));
 
-                // effect
-                if !child_fiber.is_functional_tree() {
-                    if let Some(old_props) = alternate_child.borrow().props() {
-                        if child_fiber.has_props_changed(old_props) {
-                            child_fiber.set_effect_tag(FiberEffect::Update);
-                            // console_log!("added UPDATE effect for {}", &child_fiber.element_type());
+                    // effect
+                    if !child_fiber.is_functional_tree() {
+                        if let Some(old_props) = alternate_child.borrow().props() {
+                            if child_fiber.has_props_changed(old_props) {
+                                child_fiber.set_effect_tag(FiberEffect::Update);
+                                // console_log!("added UPDATE effect for {}", &child_fiber.element_type());
+                            }
                         }
                     }
-                }
 
-                child_fiber
-            } else {
-                let mut child_fiber = Fiber::new(&child_element.element_type());
+                    Some(child_fiber)
+                } else {
+                    let mut child_fiber = Fiber::new(&child_element.element_type());
 
-                child_fiber.set_props(child_element.props_mut().take());
-                let element_children = child_element.children_mut().take().map(|children| {
-                    Rc::new(RefCell::new(children))
+                    child_fiber.set_props(child_element.props_mut().take());
+                    let element_children = child_element.children_mut().take().map(|children| {
+                        Rc::new(RefCell::new(children))
+                    });
+                    child_fiber.set_element_children(element_children);
+
+                    // relate to parent (current fiber)
+                    child_fiber.set_parent(Rc::clone(wip_unit));
+
+                    // effect
+                    if !child_fiber.is_functional_tree() {
+                        child_fiber.set_effect_tag(FiberEffect::Placement);
+                        // console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
+                    }
+
+                    Some(child_fiber)
+                };
+
+                child_fiber.as_mut().map(|child_fiber| {
+                    if child_fiber.is_functional_tree() {
+                        let func = child_element.component_function().unwrap();
+                        let props = child_element.component_function_props().unwrap();
+
+                        child_fiber.set_component_function(Some(Rc::clone(&func)));
+                        child_fiber.set_component_function_props(Some(Rc::clone(&props)));
+                        child_fiber.set_hooks(Some(vec![]));
+                    }
                 });
-                child_fiber.set_element_children(element_children);
-
-                // relate to parent (current fiber)
-                child_fiber.set_parent(Rc::clone(wip_unit));
-
-                // effect
-                if !child_fiber.is_functional_tree() {
-                    child_fiber.set_effect_tag(FiberEffect::Placement);
-                    // console_log!("added PLACEMENT effect for {}", &child_fiber.element_type());
-                }
 
                 child_fiber
-            };
-
-            if child_fiber.is_functional_tree() {
-                let func = child_element.component_function().unwrap();
-                let props = child_element.component_function_props().unwrap();
-
-                child_fiber.set_component_function(Some(Rc::clone(&func)));
-                child_fiber.set_component_function_props(Some(Rc::clone(&props)));
-                child_fiber.set_hooks(Some(vec![]));
-            }
+            });
 
             if let Some(old_child_fiber) = old_child_fiber.as_ref() {
                 if !has_same_type {
@@ -331,18 +425,21 @@ impl Context {
                 old_child_fiber = old_child_sibling;
             }
 
-            let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
-
-            if i == 0 {
-                first_child_fiber = Some(Rc::clone(&child_fiber));
-            } else {
-                if let Some(previous_sibling) = previous_sibling {
-                    previous_sibling.borrow_mut().set_sibling(Rc::clone(&child_fiber));
-                }
-            }
             
-            previous_sibling = Some(Rc::clone(&child_fiber));
-            i += 1;
+            if let Some(child_fiber) = child_fiber {
+                let child_fiber = Rc::new(RefCell::new(Box::new(child_fiber)));
+
+                if i == 0 {
+                    first_child_fiber = Some(Rc::clone(&child_fiber));
+                } else {
+                    if let Some(previous_sibling) = previous_sibling {
+                        previous_sibling.borrow_mut().set_sibling(Rc::clone(&child_fiber));
+                    }
+                }
+                
+                previous_sibling = Some(Rc::clone(&child_fiber));
+                i += 1;
+            }
 
         }
 
@@ -392,7 +489,22 @@ impl Context {
             },
             Some(FiberEffect::Deletion) => {
                 // console_log!("executing DELETION for {}", fiber.borrow().element_type());
-                self.commit_node_deletion(&fiber)?;
+
+                // This can break if we have a functional component that returns another functional component
+                // without an element in between. An iterator through all children of a fiber to find
+                // the next DOM element would be fine but for my current case simply getting the first child is quicker.
+                if fiber.borrow().is_functional_tree() {
+                    let fiber_borrowed = fiber.borrow();
+
+                    if let Some(child) = fiber_borrowed.child().as_ref() {
+                        self.commit_node_deletion(&child)?;
+                    } else {
+                        self.commit_node_deletion(&fiber)?;
+                    }
+                } else {
+                    self.commit_node_deletion(&fiber)?;
+                }
+
             },
             None => {}
         }
@@ -547,7 +659,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
 
     fiber.add_hook(Rc::clone(&new_hook));
 
-    let set_state = Closure::once_into_js(Box::new(move |new_state: JsValue| {
+    let set_state = Closure::wrap(Box::new(move |new_state: JsValue| {
         *new_hook.borrow_mut() = new_state;
         let mut context = Context::from_ptr(context_ptr);
 
@@ -575,7 +687,7 @@ pub fn use_state(context_ptr: *mut Context, initial_value: JsValue) -> Box<[JsVa
         context.next_unit_of_work = Some(Rc::clone(&root));
 
         Box::into_raw(context);
-    }) as Box<dyn FnMut(JsValue)>);
+    }) as Box<dyn FnMut(JsValue)>).into_js_value();
 
     fiber.incr_hook_idx();
     mem::drop(fiber);

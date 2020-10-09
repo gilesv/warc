@@ -54,6 +54,13 @@ export default {
             props ? props.className : null,
             props ? props.nodeValue: null,
             props ? props.onClick : null,
+            props ? props.onChange : null,
+            props ? props.onBlur : null,
+            props ? props.onKeyDown : null,
+            props ? props.type : null,
+            props ? props.value : null,
+            props ? props.checked : null,
+            props ? props.placeholder : null,
           );
           return glue.create_element(type, elementProps, children);
         }

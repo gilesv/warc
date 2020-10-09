@@ -39,10 +39,11 @@ features = [
   'Document',
   'Element',
   'HtmlElement',
+  'HtmlInputElement',
   'Node',
   'Text',
   'Window',
-  'EventTarget'
+  'EventTarget',
 ]
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
