@@ -1,4 +1,4 @@
-import * as wasm from './fusion_wasm_bg.wasm';
+import * as wasm from './reactron_bg.wasm';
 
 const heap = new Array(32).fill(undefined);
 
@@ -214,7 +214,7 @@ function makeMutClosure(arg0, arg1, dtor, f) {
     return real;
 }
 function __wbg_adapter_14(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures__invoke1_mut__he38c5826671c1902(arg0, arg1, addHeapObject(arg2));
+    wasm.wasm_bindgen__convert__closures__invoke1_mut__h009e2689a6f3daf5(arg0, arg1, addHeapObject(arg2));
 }
 
 /**
@@ -281,6 +281,17 @@ export function use_state(context_ptr, initial_value) {
     } finally {
         wasm.__wbindgen_export_4.value += 16;
     }
+}
+
+function handleError(f) {
+    return function () {
+        try {
+            return f.apply(this, arguments);
+
+        } catch (e) {
+            wasm.__wbindgen_exn_store(addHeapObject(e));
+        }
+    };
 }
 
 function passArray32ToWasm0(arg, malloc) {
@@ -353,16 +364,6 @@ export function create_props(class_name, node_value, on_click, on_change, on_blu
     return ret;
 }
 
-function handleError(f) {
-    return function () {
-        try {
-            return f.apply(this, arguments);
-
-        } catch (e) {
-            wasm.__wbindgen_exn_store(addHeapObject(e));
-        }
-    };
-}
 /**
 */
 export class Context {
@@ -514,7 +515,7 @@ export const __wbindgen_throw = function(arg0, arg1) {
 };
 
 export const __wbindgen_closure_wrapper65 = function(arg0, arg1, arg2) {
-    var ret = makeMutClosure(arg0, arg1, 8, __wbg_adapter_14);
+    var ret = makeMutClosure(arg0, arg1, 19, __wbg_adapter_14);
     return addHeapObject(ret);
 };
 

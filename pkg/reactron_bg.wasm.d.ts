@@ -13,6 +13,6 @@ export function create_props(a: number, b: number, c: number, d: number, e: numb
 export function __wbindgen_malloc(a: number): number;
 export function __wbindgen_realloc(a: number, b: number, c: number): number;
 export const __wbindgen_export_2: WebAssembly.Table;
-export function wasm_bindgen__convert__closures__invoke1_mut__he38c5826671c1902(a: number, b: number, c: number): void;
+export function wasm_bindgen__convert__closures__invoke1_mut__h009e2689a6f3daf5(a: number, b: number, c: number): void;
 export function __wbindgen_free(a: number, b: number): void;
 export function __wbindgen_exn_store(a: number): void;
