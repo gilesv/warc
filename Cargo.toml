@@ -1,6 +1,6 @@
 # You must change these to your own details.
 [package]
-name = "fusion-wasm"
+name = "reactron"
 description = ""
 version = "0.1.0"
 authors = ["Vinicius Giles <gilesv@protonmail.com>"]
