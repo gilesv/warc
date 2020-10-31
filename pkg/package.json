@@ -1,0 +1,16 @@
+{
+  "name": "fusion-wasm",
+  "collaborators": [
+    "Vinicius Giles <gilesv@protonmail.com>"
+  ],
+  "description": "",
+  "version": "0.1.0",
+  "files": [
+    "fusion_wasm_bg.wasm",
+    "fusion_wasm.js",
+    "fusion_wasm.d.ts"
+  ],
+  "module": "fusion_wasm.js",
+  "types": "fusion_wasm.d.ts",
+  "sideEffects": false
+}
